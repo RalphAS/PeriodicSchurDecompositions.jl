@@ -12,32 +12,34 @@ decomposition for complex element types.
 
 ### Periodic Schur decomposition
 
-Given a series of `NxN` matrices `A[j]`, `j=1...p`, a periodic Schur decomposition (PSD)
+Given a series of $N\times N$ matrices $A_j,\ j=1,\ldots,p$, a periodic Schur decomposition (PSD)
 is a factorization of the form:
-```julia
-Q[1]'*A[1]*Q[2] = T[1]
-Q[2]'*A[2]*Q[3] = T[2]
-...
-Q[p]'*A[p]*Q[1] = T[p]
-```
-where the `Q[j]` are unitary (orthogonal) and the `T[j]` are upper triangular,
-except that one of the `T[j]` is quasi-triangular for real element types.
+
+$$\begin{aligned}
+Q_1^\prime A_1 Q_2 &= T_1 \\
+Q_2^\prime A_2 Q_3 &= T_2 \\
+\vdots& \\
+Q_p^\prime A_p Q_1 &= T_p
+\end{aligned}$$
+
+where the $Q_j$ are unitary (orthogonal) and the $T_j$ are upper triangular,
+except that one of the $T_j$ is quasi-triangular for real element types.
 It furnishes the eigenvalues and invariant subspaces of the matrix product
-`prod(A)`.
+$\Pi_{j=1}^p A_j$.
 
 The principal reason for using the PSD is that accuracy may be lost if one
-forms the product of the `A_j` before eigen-analysis. For some applications the
+forms the product of the $A_j$ before eigen-analysis. For some applications the
 intermediate Schur vectors are also useful.
 
-### Generalized Periodic Schur decomposition
-Given a series of `NxN` matrices `A[j]`, `j=1...p`, and a signature vector
-`S` where `S[j]` is `1` or `-1`, a generalized periodic Schur decomposition (GPSD)
-is a factorization of the formal product `A[1]^(S[1]*A[2]^(S[2]*...*A[p]^(S[p])`:
-`Q[j]' * A[j] * Q[j+1] = T[j]` if `S[j] == 1` and
-`Q[j+1]' * A[j] * Q[j] = T[j]` if `S[j] == -1`.
+### Generalized periodic Schur decomposition
+Given a series of $N\times N$ matrices $A_j,\ j=1,\ldots,p$, and a signature vector
+$S$ where $s_j\in \{1,-1\}$, a generalized periodic Schur decomposition (GPSD)
+is a factorization of the formal product $\Pi_{j=1}^p A_j^{s_j}$ so that
+$Q_j^\prime A_j  Q_{j+1} = T_j$ if $s_j = 1$ and
+$Q_{j+1}^\prime  A_j  Q_j = T_j$ if $s_j = -1$.
 
 The GPSD is an extension of the QZ decomposition used for generalized eigenvalue
-problems.
+problems. Thus formally infinite eigenvalues are not problematic.
 
 ## References
 

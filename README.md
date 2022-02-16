@@ -3,6 +3,7 @@
 ![Lifecycle](https://img.shields.io/badge/lifecycle-experimental-orange.svg)
 [![Build Status](https://github.com/RalphAS/PeriodicSchurDecompositions.jl/workflows/CI/badge.svg)](https://github.com/RalphAS/PeriodicSchurDecompositions.jl/actions)
 [![Coverage](https://codecov.io/gh/RalphAS/PeriodicSchurDecompositions.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/RalphAS/PeriodicSchurDecompositions.jl)
+[![Documentation](https://img.shields.io/badge/docs-dev-blue.svg)](https://RalphAS.github.io/PeriodicSchurDecompositions.jl/dev)
 
 ## Periodic Schur decomposition
 
