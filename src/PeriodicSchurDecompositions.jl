@@ -11,7 +11,7 @@ const slicot_shifts = Ref(true)
 import LinearAlgebra: lmul!, rmul!
 using LinearAlgebra: checksquare, require_one_based_indexing, reflector!, Givens
 
-export phessenberg!, pschur!, PeriodicSchur
+export pschur, pschur!, phessenberg!, PeriodicSchur
 
 """
 PeriodicSchur
