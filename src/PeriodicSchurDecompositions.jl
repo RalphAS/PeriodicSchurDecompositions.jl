@@ -16,16 +16,24 @@ export pschur, pschur!, phessenberg!, PeriodicSchur
 """
 PeriodicSchur
 
-Matrix factorization type of the periodic Schur factorization of a series of matrices.
-This is the return type of [`pschur!(_)`](@ref).
+Matrix factorization type of the periodic Schur factorization of a series
+`A₁, A₂, ... Aₚ` of matrices. This is the return type of [`pschur!(_)`](@ref).
 
-For a series `A₁, A₂, ... Aₚ`, the decomposition is
+The `orientation` property may be `'L'`(left), corresponding to the product
+ `Aₚ * Aₚ₋₁ * ... * A₂ * A₁`
+or `'R'`(right), for the product `A₁ * A₂ * ... * Aₚ`.
+
+The decomposition for the "right" orientation is
 `Z₁' * A₁ * Z₂ = T₁; Z₂' * A₂ * Z₃ = T₂; ...; Zₚ' * Aₚ * Z₁ = Tₚ.`
 
-For real element types, `T₁` is a quasi-triangular "real Schur" matrix. Otherwise
+The decomposition for the "left" orientation is
+`Z₂' * A₁ * Z₁ = T₁; Z₃' * A₂ * Z₂ = T₂; ...; Z₁' * Aₚ * Zₚ = Tₚ.`
+
+For real element types, `Tₖ` is a quasi-triangular "real Schur" matrix,
+where `k` is the value of the `schurindex` field. Otherwise
 the `Tⱼ` are upper triangular. The `Zⱼ` are unitary (orthogonal for reals).
 
-Given `F::PeriodicSchur`, the (quasi) triangular Schur factor `T₁` can be obtained via
+Given `F::PeriodicSchur`, the (quasi) triangular Schur factor `Tₖ` can be obtained via
 `F.T1`.  `F.T` is a vector of the remaining triangular `Tⱼ`.
 `F.Z` is a vector of the `Zⱼ`.
 `F.values` is a vector of the eigenvalues of the product of the `Aⱼ`.
@@ -35,18 +43,25 @@ struct PeriodicSchur{Ty, St1<:AbstractMatrix, St<:AbstractMatrix, Sz<:AbstractMa
     T::Vector{St}
     Z::Vector{Sz}
     values::Vector
+    orientation::Char
+    schurindex::Int
     PeriodicSchur{Ty,St1,St,Sz}(T1::AbstractMatrix{Ty},
                                 T::Vector{<:AbstractMatrix{Ty}},
                                 Z::Vector{<:AbstractMatrix{Ty}},
-                                values::Vector
-                                ) where {Ty,St1,St,Sz} = new(T1, T, Z, values)
+                                values::Vector,
+                                orientation::Char='R',
+                                schurindex::Int=1
+                                ) where {Ty,St1,St,Sz} = new(T1, T, Z, values,
+                                                             orientation, schurindex)
 end
 function PeriodicSchur(T1::St1,
                        T::Vector{<:AbstractMatrix{Ty}},
                        Z::Vector{<:AbstractMatrix{Ty}},
-                       values::Vector
+                       values::Vector,
+                       orientation::Char='R',
+                       schurindex::Int=1
                        ) where {St1<:AbstractMatrix{Ty}} where {Ty}
-    PeriodicSchur{Ty, St1, eltype(T), eltype(Z)}(T1, T, Z, values)
+    PeriodicSchur{Ty, St1, eltype(T), eltype(Z)}(T1, T, Z, values, orientation, schurindex)
 end
 
 # TODO: destructure-by-iteration
@@ -54,18 +69,19 @@ end
 include("householder.jl")
 
 """
-    pschur(A::Vector{S<:StridedMatrix}) -> F::PeriodicSchur
+    pschur(A::Vector{S<:StridedMatrix}, lr::Symbol) -> F::PeriodicSchur
 
-Computes a periodic Schur decomposition of a series of general square matrices.
+Computes a periodic Schur decomposition of a series of general square matrices
+with left (`lr=:L`) or right (`lr=:R`) orientation.
 
 Optional arguments `wantT` and `wantZ`, defaulting to `true`, are booleans which may
 be used to save time and memory by suppressing computation of the `T` and `Z`
 matrices. See [`PeriodicSchur`](@ref) for the resulting structure.
 """
-function pschur(A::AbstractVector{S}; kwargs...
+function pschur(A::AbstractVector{S}, lr::Symbol=:R; kwargs...
                 ) where {S<:AbstractMatrix{T}} where {T<:Real}
     Atmp = [copy(Aj) for Aj in A]
-    pschur!(Atmp; kwargs...)
+    pschur!(Atmp, lr; kwargs...)
 end
 
 """
@@ -73,10 +89,19 @@ end
 
 Same as [`pschur`](@ref) but uses the input matrices `A` as workspace.
 """
-function pschur!(A::AbstractVector{S}; wantZ::Bool=true, wantT::Bool=true,
+function pschur!(A::AbstractVector{S}, lr::Symbol=:R; wantZ::Bool=true, wantT::Bool=true,
                  ) where {S<:AbstractMatrix{T}} where {T<:Real}
-    H1,pH = phessenberg!(A)
+    orient = char_lr(lr)
     p = length(A)
+    if orient == 'L'
+        Aarg = similar(A)
+        for j in 1:p
+            Aarg[j]=A[p+1-j]
+        end
+        H1,pH = phessenberg!(Aarg)
+    else
+        H1,pH = phessenberg!(A)
+    end
     if wantZ
         Q = [_materializeQ(H1)]
         for j in 1:p-1
@@ -85,10 +110,36 @@ function pschur!(A::AbstractVector{S}; wantZ::Bool=true, wantT::Bool=true,
     else
         Q = nothing
     end
-    Hs = [pH[j].R for j in 1:p-1]
+    if p == 1
+        Hs = Vector{Matrix{T}}(undef,0)
+    else
+        Hs = [pH[j].R for j in 1:p-1]
+    end
     H1.H .= triu(H1.H,-1)
-    F = pschur!(H1.H, Hs, wantT=wantT, wantZ=wantZ, Q=Q)
+    F = pschur!(H1.H, Hs, wantT=wantT, wantZ=wantZ, Q=Q, rev=(orient == 'L'))
 end
+
+function char_lr(lr::Symbol)
+    if lr === :R
+        return 'R'
+    elseif lr === :L
+        return 'L'
+    else
+        throw_lr()
+    end
+end
+
+function sym_lr(lr::Char)
+    if lr == 'R'
+        return :R
+    elseif lr == 'L'
+        return :L
+    else
+        throw_lr()
+    end
+end
+
+@noinline throw_lr() = throw(ArgumentError("orientation argument must be either :R (right) or :L (left)"))
 
 using LinearAlgebra: QRPackedQ
 _materializeQ(H::Hessenberg{T}) where {T<:LinearAlgebra.BlasFloat} = Matrix(H.Q)
@@ -194,7 +245,8 @@ function pschur!(H1H::S1, Hs::AbstractVector{S};
                  wantT::Bool=true,
                  wantZ::Bool=true,
                  Q=nothing,
-                 maxitfac=30
+                 maxitfac=30,
+                 rev=false
                  ) where {S1<:Union{UpperHessenberg{T},StridedMatrix{T}},
                           S<:StridedMatrix{T}} where {T<:Real}
     p = length(Hs)+1
@@ -209,9 +261,15 @@ function pschur!(H1H::S1, Hs::AbstractVector{S};
         else
             Z = Q
         end
-        sT1 = fill(H1H[1,1],1,1)
-        sT = [fill(Hs[j-1][1,1],1,1) for j in 2:p]
-        return PeriodicSchur(sT1, sT, Z, [λ1])
+        if rev
+            sT1 = fill(H1H[1,1],1,1)
+            sT = [fill(Hs[p-j][1,1],1,1) for j in 1:p-1]
+            return PeriodicSchur(sT1, sT, Z, [λ1], 'L', p)
+        else
+            sT1 = fill(H1H[1,1],1,1)
+            sT = [fill(Hs[j-1][1,1],1,1) for j in 2:p]
+            return PeriodicSchur(sT1, sT, Z, [λ1])
+        end
     end
 
     dat1 = T(3)/T(4)
@@ -785,7 +843,22 @@ function pschur!(H1H::S1, Hs::AbstractVector{S};
     if !wantZ
        Z = [similar(H1,0,0)]
     end
-    return PeriodicSchur(H1,Hs,Z,λ)
+    if rev
+        if wantZ
+            Zr = similar(Z)
+            Zr[1] = Z[1]
+            for l in 2:p
+                Zr[l] = Z[p+2-l]
+            end
+        end
+        Hr = similar(Hs)
+        for l in 1:p-1
+            Hr[l] = Hs[p-l]
+        end
+        return PeriodicSchur(H1,Hr,Zr,λ,'L',p)
+    else
+        return PeriodicSchur(H1,Hs,Z,λ)
+    end
 end
 
 include("rschur2x2.jl")

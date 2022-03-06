@@ -86,25 +86,36 @@ function compare_eigvals(λ,λx,λtol)
     end
 end
 
-function pschur_test(A::AbstractVector{TM}) where {TM <: AbstractMatrix{T}} where T
+function pschur_test(A::AbstractVector{TM}; left=false
+                     ) where {TM <: AbstractMatrix{T}} where T
     p = length(A)
     n = size(A[1],1)
     qtol = 10
     tol = 32
     λtol = 1000 # these are non-normal problems, so curb your expectations
     Awrk = [copy(A[j]) for j in 1:p]
-    pS = pschur!(Awrk, wantZ=true)
-    Ts = [Matrix(pS.T1)]
-    for j in 1:p-1
-        push!(Ts, Matrix(pS.T[j]))
+    pS = pschur!(Awrk, left ? :L : :R, wantZ=true)
+    js = pS.schurindex
+    Ts = []
+    jt = 0
+    for j in 1:p
+        if j == js
+            push!(Ts, Matrix(pS.T1))
+        else
+            jt += 1
+            push!(Ts, Matrix(pS.T[jt]))
+        end
     end
     Zs = pS.Z
-    l1 = (p==1) ? 1 : 2
-    Ax = [Zs[j]*Ts[j]*Zs[mod(j,p)+1]' for j in 1:p]
+    if left
+        Ax = [Zs[mod(j,p)+1]*Ts[j]*Zs[j]' for j in 1:p]
+    else
+        Ax = [Zs[j]*Ts[j]*Zs[mod(j,p)+1]' for j in 1:p]
+    end
     for j in 1:p
         # TODO: use hard triu tests when we have logic to clear detritus
-        #@test istriu(Ts[j], j==1 ? -1 : 0)
-        @test norm(tril(Ts[j],j==1 ? -2 : -1)) < 100 * eps(real(T)) * n
+        #@test istriu(Ts[j], j==js ? -1 : 0)
+        @test norm(tril(Ts[j],j==js ? -2 : -1)) < 100 * eps(real(T)) * n
         @test norm(Zs[j]*Zs[j]' - I) < qtol * eps(real(T)) * n
         if developing
             r = norm(A[j] - Ax[j]) / (eps(real(T)) * n)
@@ -118,7 +129,11 @@ function pschur_test(A::AbstractVector{TM}) where {TM <: AbstractMatrix{T}} wher
         end
     end
     if p > 1
-        Aprod = foldl(*,A)
+        if left
+            Aprod = foldl((x,y) -> y*x, A)
+        else
+            Aprod = foldl(*,A)
+        end
     else
         Aprod = copy(A[1])
     end
@@ -132,10 +147,14 @@ end
 for T in [Float64]
   @testset "Periodic Schur Hess+UT $T" begin
    for p in [1,2,3,5]
-        n = 5
-        A = [triu(rand(T,n,n)) for j in 1:p]
-        A[1] = triu(rand(T,n,n),-1) # Hessenberg
-        pschur_test(A)
+       n = 5
+       A = [triu(rand(T,n,n)) for j in 1:p]
+       A[1] = triu(rand(T,n,n),-1) # Hessenberg
+       pschur_test(A)
+       if p > 1
+           A[1],A[p] = A[p],A[1]
+       end
+       pschur_test(A, left=true)
     end
   end
 end
@@ -146,6 +165,9 @@ for T in [Float64, BigFloat]
         n = 5
         A = [rand(T,n,n) for j in 1:p]
         pschur_test(A)
+        if T == Float64
+            pschur_test(A, left=true)
+        end
     end
   end
 end
