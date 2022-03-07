@@ -10,14 +10,14 @@ your_eigvals = pS.values
 ```
 The result `pS` is a `PeriodicSchur` object.
 Computation of the Schur vectors is
-fairly expensive, so it may be suppressed via keyword arguments.
+fairly expensive, so it may be suppressed via keyword arguments (`wantZ=false`).
 
 For generalized PSD, the basic API is as follows:
 
 ```julia
 p = period_of_your_problem()
 Aarg = [your_complex_matrix(j) for j in 1:p]
-S = [sign_for_your_problem(j) for j in 1:p]
+S = [sign_for_your_problem(j) for j in 1:p] # a vector of `Bool`, true for positive.
 gpS = pschur!(Aarg, S)
 your_eigvals = gpS.values
 ```

@@ -31,6 +31,20 @@ The principal reason for using the PSD is that accuracy may be lost if one
 forms the product of the $A_j$ before eigen-analysis. For some applications the
 intermediate Schur vectors are also useful.
 
+### Operator ordering
+
+For many applications it is more natural to pose the matrix product in the form
+$A_p A_{p-1}\ldots\A_2 A_1$. In this case the more useful factorization is
+
+$$\begin{aligned}
+Q_2^\prime A_1 Q_1 &= T_1 \\
+Q_3^\prime A_2 Q_2 &= T_2 \\
+\vdots& \\
+Q_1^\prime A_p Q_p &= T_p.
+\end{aligned}$$
+
+This ordering is accommodated with the ':L' (left) orientation argument to `pschur!`.
+
 ### Generalized periodic Schur decomposition
 Given a series of $N\times N$ matrices $A_j,\ j=1,\ldots,p$, and a signature vector
 $S$ where $s_j\in \{1,-1\}$, a generalized periodic Schur decomposition (GPSD)

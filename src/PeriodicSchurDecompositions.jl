@@ -72,7 +72,7 @@ include("householder.jl")
     pschur(A::Vector{S<:StridedMatrix}, lr::Symbol) -> F::PeriodicSchur
 
 Computes a periodic Schur decomposition of a series of general square matrices
-with left (`lr=:L`) or right (`lr=:R`) orientation.
+with left (`lr=:L`) or right (`lr=:R`) product ordering.
 
 Optional arguments `wantT` and `wantZ`, defaulting to `true`, are booleans which may
 be used to save time and memory by suppressing computation of the `T` and `Z`

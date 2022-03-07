@@ -9,6 +9,10 @@ pschur
 pschur!
 ```
 
+```@docs
+gpschur
+```
+
 ## Periodic Hessenberg decompositions
 ```@docs
 phessenberg!

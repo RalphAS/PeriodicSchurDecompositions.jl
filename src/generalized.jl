@@ -1,5 +1,35 @@
 using LinearAlgebra: Givens, givensAlgorithm
 
+"""
+GeneralizedPeriodicSchur
+
+Matrix factorization type of the generalized periodic Schur factorization of a series
+`A₁, A₂, ... Aₚ` of matrices. This is the return type of [`pschur!(_)`](@ref)
+with a sign vector.
+
+The `orientation` property may be `'L'`(left), corresponding to the product
+ `Aₚ^sₚ * Aₚ₋₁^sₚ₋₁ * ... * A₂^s₂ * A₁^s₁`
+or `'R'`(right), for the product `A₁^s₁ * A₂^s₂ * ... * Aₚ^sₚ`,
+where the signs `sⱼ` are '±1`.
+
+The decomposition for the "right" orientation is
+`Zⱼ' * Aⱼ * Zᵢ = Tⱼ` where `i=mod(j,p)+1` if `sⱼ=1`, and
+`Zᵢ' * Aⱼ * Zⱼ = Tⱼ` if `sⱼ=-1`.
+
+The decomposition for the "left" orientation is
+`Zᵢ' * Aⱼ * Zⱼ = Tⱼ`  where `i=mod(j,p)+1` if `sⱼ=1`, and
+`Zⱼ' * Aⱼ * Zᵢ = Tⱼ` if `sⱼ=-1`.
+
+For real element types, `Tₖ` is a quasi-triangular "real Schur" matrix,
+where `k` is the value of the `schurindex` field. Otherwise
+the `Tⱼ` are upper triangular. The `Zⱼ` are unitary (orthogonal for reals).
+
+Given `F::GeneralizedPeriodicSchur`, the (quasi) triangular Schur factor `Tₖ` can be obtained via
+`F.T1`.  `F.T` is a vector of the remaining triangular `Tⱼ`.
+`F.Z` is a vector of the `Zⱼ`.
+`F.values` is a vector of the eigenvalues of the product of the `Aⱼ`.
+(The eigenvalues are stored internally in scaled form to avoid over/underflow.)
+"""
 struct GeneralizedPeriodicSchur{Ty, St1<:AbstractMatrix, St<:AbstractMatrix, Sz<:AbstractMatrix, Ss}
     S::Ss
     schurindex::Int
@@ -9,16 +39,19 @@ struct GeneralizedPeriodicSchur{Ty, St1<:AbstractMatrix, St<:AbstractMatrix, Sz<
     α::Vector
     β::Vector
     αscale::Vector{Int}
+    orientation::Char
     function GeneralizedPeriodicSchur{Ty,St1,St,Sz,Ss}(S::AbstractVector{Bool},
-                                                    schurindex::Int,
-                                                    T1::AbstractMatrix{Ty},
-                                                    T::Vector{<:AbstractMatrix{Ty}},
-                                                    Z::Vector{<:AbstractMatrix{Ty}},
-                                                    α::Vector{Ty},
-                                                    β::Vector{Ty},
-                                                    αscale::Vector{Int}) where {Ty,St1,St,Sz,Ss}
+                                                       schurindex::Int,
+                                                       T1::AbstractMatrix{Ty},
+                                                       T::Vector{<:AbstractMatrix{Ty}},
+                                                       Z::Vector{<:AbstractMatrix{Ty}},
+                                                       α::Vector{Ty},
+                                                       β::Vector{Ty},
+                                                       αscale::Vector{Int},
+                                                       orientation::Char
+                                                       ) where {Ty,St1,St,Sz,Ss}
         # maybe enforce sanity?
-        new(S, schurindex, T1, T, Z, α, β, αscale)
+        new(S, schurindex, T1, T, Z, α, β, αscale, orientation)
     end
 end
 function GeneralizedPeriodicSchur(S::Ss, schurindex::Int,
@@ -27,12 +60,13 @@ function GeneralizedPeriodicSchur(S::Ss, schurindex::Int,
                                   Z::Vector{<:AbstractMatrix{Ty}},
                                   α::Vector,
                                   β::Vector,
-                                  αscale::Vector
+                                  αscale::Vector,
+                                  orientation::Char='R'
                                   ) where {St1<:AbstractMatrix{Ty},
                                            Ss<:AbstractVector{Bool}
                                            } where {Ty}
     GeneralizedPeriodicSchur{Ty, St1, eltype(T), eltype(Z), Ss}(S, schurindex, T1, T, Z,
-                                                                α, β, αscale)
+                                                                α, β, αscale, orientation)
 end
 function Base.getproperty(P::GeneralizedPeriodicSchur{T},s::Symbol) where {T}
     if s == :values
@@ -44,9 +78,23 @@ function Base.getproperty(P::GeneralizedPeriodicSchur{T},s::Symbol) where {T}
     end
 end
 
-function pschur!(A::AbstractVector{TA}, S::AbstractVector{Bool}=trues(length(A));
+"""
+    pschur!(A::Vector{S<:StridedMatrix}, S::Vector{Bool}, lr::Symbol) -> F::GeneralizedPeriodicSchur
+
+Computes a generalized periodic Schur decomposition of a series of general square matrices
+with left (`lr=:L`) or right (`lr=:R`) orientation.
+
+Optional arguments `wantT` and `wantZ`, defaulting to `true`, are booleans which may
+be used to save time and memory by suppressing computation of the `T` and `Z`
+matrices. See [`GeneralizedPeriodicSchur`](@ref) for the resulting structure.
+
+Currently `S[1]` must be `true`.
+"""
+function pschur!(A::AbstractVector{TA}, S::AbstractVector{Bool}=trues(length(A)),
+                 lr::Symbol=:R;
                  wantZ::Bool=true, wantT::Bool=true,
                  ) where {TA<:AbstractMatrix{T}} where {T<:Complex}
+    orient = char_lr(lr)
     p = length(A)
     if all(S)
         H1,pH = phessenberg!(A)
@@ -60,12 +108,12 @@ function pschur!(A::AbstractVector{TA}, S::AbstractVector{Bool}=trues(length(A))
         end
         Hs = [pH[j].R for j in 1:p-1]
         H1.H .= triu(H1.H,-1)
-        F = pschur!(H1.H, Hs, S, wantT=wantT, wantZ=wantZ, Q=Q)
+        F = pschur!(H1.H, Hs, S, wantT=wantT, wantZ=wantZ, Q=Q, rev=(orient == 'L'))
     else
         Hs,Qs = _phessenberg!(A,S)
         H1 = popfirst!(Hs)
         Q = wantZ ? Qs : nothing
-        F = pschur!(H1, Hs, S, wantT=wantT, wantZ=wantZ, Q=Q)
+        F = pschur!(H1, Hs, S, wantT=wantT, wantZ=wantZ, Q=Q, rev=(orient == 'L'))
     end
     return F
 end
@@ -89,7 +137,8 @@ end
 function pschur!(H1H::Th1, Hs::AbstractVector{Th},
                  S::AbstractVector{Bool}=trues(length(Hs)+1);
                  wantZ::Bool=true, wantT::Bool=true,
-                 Q::Union{Nothing,Vector{Th}}=nothing, maxitfac=30
+                 Q::Union{Nothing,Vector{Th}}=nothing, maxitfac=30,
+                 rev::Bool=false
                  ) where {Th1<:Union{UpperHessenberg{T}, StridedMatrix{T}},
                           Th<:StridedMatrix{T}} where {T<:Complex}
     p = length(Hs)+1
@@ -817,14 +866,29 @@ function pschur!(H1H::Th1, Hs::AbstractVector{Th},
 
     end
 
-    return GeneralizedPeriodicSchur(S,1,H1,Hs,Z,α,β,αscale)
+    if rev
+        if wantZ
+            Zr = similar(Z)
+            Zr[1] = Z[1]
+            for l in 2:p
+                Zr[l] = Z[p+2-l]
+            end
+        end
+        Hr = similar(Hs)
+        for l in 1:p-1
+            Hr[l] = Hs[p-l]
+        end
+        return GeneralizedPeriodicSchur(S,p,H1,Hr,Zr,α,β,αscale,'L')
+    else
+        return GeneralizedPeriodicSchur(S,1,H1,Hs,Z,α,β,αscale)
+    end
 end
 
 """
 _safeprod(s,x0,x) -> alpha,beta,scale::Int
 
 represent `x0^s[1] * cumprod(x.^s[2:end])` as `α / β * 2^scale` where
-`α = 0` or `abs(α) ∈ [1,2)`, `β ∈ [0,1]`, avoiding overflow/underflow.
+`α = 0` or `abs(α) ∈ [1,2)`, `β ∈ {0,1}`, avoiding overflow/underflow.
 """
 function _safeprod(s::AbstractVector{Bool},x0::T,v::Vector{T}) where T
     # WARNING: assumes base 2, like IEEE
@@ -1071,6 +1135,39 @@ function _phessenberg!(A::AbstractVector{TA}, S::AbstractVector{Bool};
 end
 
 """
+    gpschur(As, Bs) -> F::GeneralizedPeriodicSchur
+
+Computes a generalized periodic Schur decomposition corresponding to the formal product
+        `Bₚ⁻¹Aₚ...B₁⁻¹A₁`
+of paired series of matrices in left operator order `[A₁,...,Aₚ]`,`[B₁,...,Bₚ]`.
+
+Terms in the decomposition are actually shifted by one; this does not change the
+eigenvalues but requires attention when dealing with invariant subspaces.
+"""
+function gpschur(As::AbstractVector{MT},Bs::AbstractVector{MT}; kwargs...
+                 ) where {MT<:AbstractMatrix{T}} where {T}
+    Cs, Ss = _mkpsargs(As, Bs)
+    pschur!(Cs, Ss; kwargs...)
+end
+
+# construct argument `Cs,S` to pschur!
+function _mkpsargs(As::Vector{MT},Bs) where {MT<:AbstractMatrix{T}} where {T}
+    ph = length(As)
+    ib = (ph==1) ? 1 : (ph-1)
+    Cs = [copy(As[ph]) .+ 0im, copy(Bs[ib]) .+ 0im]
+    Ss = [true,false]
+    for j in ph-1:-1:1
+        push!(Cs,copy(As[j]) .+ 0im)
+        jx = (j == 1) ? ph : (j-1)
+        push!(Cs,copy(Bs[jx]) .+ 0im)
+        push!(Ss,true)
+        push!(Ss,false)
+    end
+    return Cs,Ss
+end
+
+
+"""
 Verify integrity of a generalized periodic Schur decomposition.
 Returns a status code (Bool) and a vector of
 normalized factorization errors (which should be O(1)).
@@ -1110,7 +1207,7 @@ function checkpsd(P::GeneralizedPeriodicSchur{T}, Hs::AbstractVector;
         end
         Hl = Hs[l]
         # Note: MB03BZ description has conjugation on the wrong side
-        if P.S[l]
+        if P.S[l] ⊻ (P.orientation == 'L')
             Hx = P.Z[l] * Tl * P.Z[l1]'
         else
             Hx = P.Z[l1] * Tl * P.Z[l]'
