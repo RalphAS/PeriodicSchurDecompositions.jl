@@ -34,7 +34,7 @@ intermediate Schur vectors are also useful.
 ### Operator ordering
 
 For many applications it is more natural to pose the matrix product in the form
-$A_p A_{p-1}\ldots\A_2 A_1$. In this case the more useful factorization is
+$A_p A_{p-1}\ldots A_2 A_1$. In this case the more useful factorization is
 
 $$\begin{aligned}
 Q_2^\prime A_1 Q_1 &= T_1 \\

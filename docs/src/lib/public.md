@@ -23,3 +23,7 @@ phessenberg!
 PeriodicSchur
 ```
 
+```@docs
+GeneralizedPeriodicSchur
+```
+
