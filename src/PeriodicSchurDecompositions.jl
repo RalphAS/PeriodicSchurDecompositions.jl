@@ -13,6 +13,8 @@ using LinearAlgebra: checksquare, require_one_based_indexing, reflector!, Givens
 
 export pschur, pschur!, phessenberg!, gpschur, PeriodicSchur, GeneralizedPeriodicSchur
 
+abstract type AbstractPeriodicSchur{T} end
+
 """
 PeriodicSchur
 
@@ -38,7 +40,8 @@ Given `F::PeriodicSchur`, the (quasi) triangular Schur factor `Tₖ` can be obta
 `F.Z` is a vector of the `Zⱼ`.
 `F.values` is a vector of the eigenvalues of the product of the `Aⱼ`.
 """
-struct PeriodicSchur{Ty, St1<:AbstractMatrix, St<:AbstractMatrix, Sz<:AbstractMatrix}
+struct PeriodicSchur{Ty, St1<:AbstractMatrix, St<:AbstractMatrix, Sz<:AbstractMatrix
+                     } <: AbstractPeriodicSchur{Ty}
     T1::St1
     T::Vector{St}
     Z::Vector{Sz}
@@ -63,6 +66,13 @@ function PeriodicSchur(T1::St1,
                        ) where {St1<:AbstractMatrix{Ty}} where {Ty}
     PeriodicSchur{Ty, St1, eltype(T), eltype(Z)}(T1, T, Z, values, orientation, schurindex)
 end
+function Base.getproperty(P::PeriodicSchur,s::Symbol)
+    if s == :period
+        return length(P.T) + 1
+    else
+        return getfield(P,s)
+    end
+end
 
 # TODO: destructure-by-iteration
 
@@ -79,13 +89,13 @@ be used to save time and memory by suppressing computation of the `T` and `Z`
 matrices. See [`PeriodicSchur`](@ref) for the resulting structure.
 """
 function pschur(A::AbstractVector{S}, lr::Symbol=:R; kwargs...
-                ) where {S<:AbstractMatrix{T}} where {T<:Real}
+                ) where {S<:AbstractMatrix{T}} where {T}
     Atmp = [copy(Aj) for Aj in A]
     pschur!(Atmp, lr; kwargs...)
 end
 
 """
-    pschur!(A::Vector{S<:StridedMatrix}) -> F::PeriodicSchur
+    pschur!(A::Vector{S<:StridedMatrix}, lr::Symbol=:R) -> F::PeriodicSchur
 
 Same as [`pschur`](@ref) but uses the input matrices `A` as workspace.
 """
@@ -850,6 +860,8 @@ function pschur!(H1H::S1, Hs::AbstractVector{S};
             for l in 2:p
                 Zr[l] = Z[p+2-l]
             end
+        else
+            Zr = Z
         end
         Hr = similar(Hs)
         for l in 1:p-1
@@ -864,7 +876,15 @@ end
 include("rschur2x2.jl")
 
 include("generalized.jl")
+
+function pschur!(A::AbstractVector{TA}, lr::Symbol=:R; kwargs...
+                 ) where {TA<:AbstractMatrix{T}} where {T<:Complex}
+    gps = pschur!(A::AbstractVector{TA}, trues(length(A)), lr; kwargs...)
+    PeriodicSchur(gps.T1, gps.T, gps.Z, gps.values, gps.orientation, gps.schurindex)
 end
+
+end # module
+
 # Local variables:
 # fill-column: 84
 # End:

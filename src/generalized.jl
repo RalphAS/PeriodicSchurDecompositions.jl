@@ -30,7 +30,9 @@ Given `F::GeneralizedPeriodicSchur`, the (quasi) triangular Schur factor `Tₖ` 
 `F.values` is a vector of the eigenvalues of the product of the `Aⱼ`.
 (The eigenvalues are stored internally in scaled form to avoid over/underflow.)
 """
-struct GeneralizedPeriodicSchur{Ty, St1<:AbstractMatrix, St<:AbstractMatrix, Sz<:AbstractMatrix, Ss}
+struct GeneralizedPeriodicSchur{Ty,
+                                St1<:AbstractMatrix, St<:AbstractMatrix, Sz<:AbstractMatrix,
+                                Ss} <: AbstractPeriodicSchur{Ty}
     S::Ss
     schurindex::Int
     T1::St1
@@ -78,8 +80,14 @@ function Base.getproperty(P::GeneralizedPeriodicSchur{T},s::Symbol) where {T}
     end
 end
 
+function pschur(A::AbstractVector{MT}, S::AbstractVector{Bool}, lr::Symbol=:R; kwargs...
+                ) where {MT<:AbstractMatrix{T}} where {T}
+    Atmp = [copy(Aj) for Aj in A]
+    pschur!(Atmp, S, lr; kwargs...)
+end
+
 """
-    pschur!(A::Vector{S<:StridedMatrix}, S::Vector{Bool}, lr::Symbol) -> F::GeneralizedPeriodicSchur
+    pschur!(A::Vector{<:StridedMatrix}, S::Vector{Bool}, lr::Symbol) -> F::GeneralizedPeriodicSchur
 
 Computes a generalized periodic Schur decomposition of a series of general square matrices
 with left (`lr=:L`) or right (`lr=:R`) orientation.
@@ -88,16 +96,26 @@ Optional arguments `wantT` and `wantZ`, defaulting to `true`, are booleans which
 be used to save time and memory by suppressing computation of the `T` and `Z`
 matrices. See [`GeneralizedPeriodicSchur`](@ref) for the resulting structure.
 
-Currently `S[1]` must be `true`.
+Currently `Sⱼ` must be `true` for the leftmost term.
 """
-function pschur!(A::AbstractVector{TA}, S::AbstractVector{Bool}=trues(length(A)),
+function pschur!(A::AbstractVector{TA}, S::AbstractVector{Bool},
                  lr::Symbol=:R;
                  wantZ::Bool=true, wantT::Bool=true,
                  ) where {TA<:AbstractMatrix{T}} where {T<:Complex}
     orient = char_lr(lr)
     p = length(A)
+    if orient == 'L'
+        Aarg = similar(A)
+        for j in 1:p
+            Aarg[j] = A[p+1-j]
+        end
+        Sarg = reverse(S)
+    else
+        Aarg = A
+        Sarg = S
+    end
     if all(S)
-        H1,pH = phessenberg!(A)
+        H1,pH = phessenberg!(Aarg)
         if wantZ
             Q = [_materializeQ(H1)]
             for j in 1:p-1
@@ -108,12 +126,14 @@ function pschur!(A::AbstractVector{TA}, S::AbstractVector{Bool}=trues(length(A))
         end
         Hs = [pH[j].R for j in 1:p-1]
         H1.H .= triu(H1.H,-1)
-        F = pschur!(H1.H, Hs, S, wantT=wantT, wantZ=wantZ, Q=Q, rev=(orient == 'L'))
+        F = pschur!(H1.H, Hs, Sarg, wantT=wantT, wantZ=wantZ, Q=Q, rev=(orient == 'L'))
     else
-        Hs,Qs = _phessenberg!(A,S)
+        # check this here so error message is less confusing
+        Sarg[1] || throw(ArgumentError("The leftmost entry in S must be true"))
+        Hs,Qs = _phessenberg!(Aarg,Sarg)
         H1 = popfirst!(Hs)
         Q = wantZ ? Qs : nothing
-        F = pschur!(H1, Hs, S, wantT=wantT, wantZ=wantZ, Q=Q, rev=(orient == 'L'))
+        F = pschur!(H1, Hs, Sarg, wantT=wantT, wantZ=wantZ, Q=Q, rev=(orient == 'L'))
     end
     return F
 end
@@ -873,6 +893,8 @@ function pschur!(H1H::Th1, Hs::AbstractVector{Th},
             for l in 2:p
                 Zr[l] = Z[p+2-l]
             end
+        else
+            Zr = Z
         end
         Hr = similar(Hs)
         for l in 1:p-1
@@ -1168,15 +1190,18 @@ end
 
 
 """
-Verify integrity of a generalized periodic Schur decomposition.
+    checkpsd(P::AbstractPeriodicSchur{T}, As::Vector{Matrix{T}})
+
+Verify integrity of a (generalized) periodic Schur decomposition.
 Returns a status code (Bool) and a vector of
 normalized factorization errors (which should be O(1)).
 """
-function checkpsd(P::GeneralizedPeriodicSchur{T}, Hs::AbstractVector;
-                  quiet=false, thresh=100) where T
+function checkpsd(P::AbstractPeriodicSchur{T}, Hs::AbstractVector;
+                  quiet=false, thresh=100, strict=false) where T
     # Hs could be structured matrices of different varieties, caveat emptor.
     p = length(Hs)
     n = size(P.T1,1)
+    S = isa(P,GeneralizedPeriodicSchur) ? P.S : trues(p)
     if P.period != p
         throw(DimensionMismatch("length of Hs vector must match period of P"))
     end
@@ -1190,10 +1215,22 @@ function checkpsd(P::GeneralizedPeriodicSchur{T}, Hs::AbstractVector;
     qtol = 10
     err = zeros(p)
     result = true
+    Ts = []
+    js = P.schurindex
+    jt = 0
+    for j in 1:p
+        if j == P.schurindex
+            push!(Ts, Matrix(P.T1))
+        else
+            jt += 1
+            push!(Ts, Matrix(P.T[jt]))
+        end
+    end
     for l in 1:p
         l1 = mod(l,p)+1
-        Tl = l==1 ? P.T1 : P.T[l-1]
-        if norm(tril(Tl,-1)) > ttol * eps(real(T))*n
+        Tl = Ts[l]
+        cmp = strict ? 0 : ttol * eps(real(T))*n
+        if norm(tril(Tl,-1)) > cmp
             if !quiet
                 @warn "triangularity fails for l=$l"
             end
@@ -1207,7 +1244,7 @@ function checkpsd(P::GeneralizedPeriodicSchur{T}, Hs::AbstractVector;
         end
         Hl = Hs[l]
         # Note: MB03BZ description has conjugation on the wrong side
-        if P.S[l] ⊻ (P.orientation == 'L')
+        if S[l] ⊻ (P.orientation == 'L')
             Hx = P.Z[l] * Tl * P.Z[l1]'
         else
             Hx = P.Z[l1] * Tl * P.Z[l]'
