@@ -900,7 +900,7 @@ function pschur!(H1H::Th1, Hs::AbstractVector{Th},
         for l in 1:p-1
             Hr[l] = Hs[p-l]
         end
-        return GeneralizedPeriodicSchur(S,p,H1,Hr,Zr,α,β,αscale,'L')
+        return GeneralizedPeriodicSchur(reverse(S),p,H1,Hr,Zr,α,β,αscale,'L')
     else
         return GeneralizedPeriodicSchur(S,1,H1,Hs,Z,α,β,αscale)
     end

@@ -39,8 +39,9 @@ for T in [ComplexF64,Float64,Complex{BigFloat},BigFloat]
     end
 end
 
+# mods needed if we add real versions of GPSD
 function gpschur_test(A::AbstractVector{TM},S; left=false
-                      ) where {TM <: AbstractMatrix{T}} where T
+                      ) where {TM <: AbstractMatrix{T}} where T <: Complex
     p = length(S)
     n = size(A[1],1)
     qtol = 10
@@ -79,10 +80,10 @@ function gpschur_test(A::AbstractVector{TM},S; left=false
     end
     Zs = pS.Z
     l1 = (p==1) ? 1 : 2
-    if left
-        Ax = [Zs[l1]*Ts[1]*Zs[1]']
-    else
+    if S[1] ⊻ left
         Ax = [Zs[1]*Ts[1]*Zs[l1]']
+    else
+        Ax = [Zs[l1]*Ts[1]*Zs[1]']
     end
     for l in 2:p
         if S[l] ⊻ left
@@ -118,11 +119,17 @@ function gpschur_test(A::AbstractVector{TM},S; left=false
     # TODO: hard tests in case of over/underflow
     λ = pS.values
     λs = diag(pS.T1)
-    for l in 2:p
+    if !pS.S[pS.schurindex]
+        λs = one(T) ./ λs
+    end
+    il = 0
+    for l in 1:p
+        l == pS.schurindex && continue
+        il += 1
         if pS.S[l]
-            λs .*= diag(pS.T[l-1])
+            λs .*= diag(pS.T[il])
         else
-            λs .*= (one(T) ./ diag(pS.T[l-1]))
+            λs .*= (one(T) ./ diag(pS.T[il]))
         end
     end
     for j in 1:n
