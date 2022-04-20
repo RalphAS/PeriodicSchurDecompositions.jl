@@ -79,6 +79,7 @@ function Base.getproperty(P::GeneralizedPeriodicSchur{T},s::Symbol) where {T}
         return getfield(P,s)
     end
 end
+Base.propertynames(P::GeneralizedPeriodicSchur) = (:period, :values, fieldnames(typeof(P))...)
 
 function pschur(A::AbstractVector{MT}, S::AbstractVector{Bool}, lr::Symbol=:R; kwargs...
                 ) where {MT<:AbstractMatrix{T}} where {T}

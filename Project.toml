@@ -8,7 +8,7 @@ LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 MatrixFactorizations = "a3b82374-2e81-5b9e-98ce-41277c0e4c87"
 
 [compat]
-MatrixFactorizations = "0.8"
+MatrixFactorizations = "0.8,0.9"
 julia = "1"
 
 [extras]

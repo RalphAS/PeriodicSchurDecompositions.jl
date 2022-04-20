@@ -73,8 +73,7 @@ function Base.getproperty(P::PeriodicSchur,s::Symbol)
         return getfield(P,s)
     end
 end
-
-# TODO: destructure-by-iteration
+Base.propertynames(P::PeriodicSchur) = (:period, fieldnames(typeof(P))...)
 
 include("householder.jl")
 
