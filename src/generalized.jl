@@ -93,11 +93,13 @@ end
 Computes a generalized periodic Schur decomposition of a series of general square matrices
 with left (`lr=:L`) or right (`lr=:R`) orientation.
 
+Entries in `S` must be `false` for the corresponding entries in `A` which are effectively
+inverted, and `true` for the rest. Currently `Sⱼ` must be `true` for the leftmost term.
+
 Optional arguments `wantT` and `wantZ`, defaulting to `true`, are booleans which may
 be used to save time and memory by suppressing computation of the `T` and `Z`
 matrices. See [`GeneralizedPeriodicSchur`](@ref) for the resulting structure.
-
-Currently `Sⱼ` must be `true` for the leftmost term.
+(`S[j]=false` corresponds to `sⱼ=-1` in the decomposition shown there.)
 """
 function pschur!(A::AbstractVector{TA}, S::AbstractVector{Bool},
                  lr::Symbol=:R;
@@ -158,10 +160,12 @@ end
 function pschur!(H1H::Th1, Hs::AbstractVector{Th},
                  S::AbstractVector{Bool}=trues(length(Hs)+1);
                  wantZ::Bool=true, wantT::Bool=true,
-                 Q::Union{Nothing,Vector{Th}}=nothing, maxitfac=30,
+                 Q::Union{Nothing,Vector{Tq}}=nothing, maxitfac=30,
                  rev::Bool=false
                  ) where {Th1<:Union{UpperHessenberg{T}, StridedMatrix{T}},
-                          Th<:StridedMatrix{T}} where {T<:Complex}
+                          Th<:StridedMatrix{T},
+                          Tq<:StridedMatrix{T},
+                          } where {T<:Complex}
     p = length(Hs)+1
     n = checksquare(H1H)
     for l in 1:p-1
@@ -901,7 +905,10 @@ function pschur!(H1H::Th1, Hs::AbstractVector{Th},
         for l in 1:p-1
             Hr[l] = Hs[p-l]
         end
-        return GeneralizedPeriodicSchur(reverse(S),p,H1,Hr,Zr,α,β,αscale,'L')
+        #        return GeneralizedPeriodicSchur(reverse(S),p,H1,Hr,Zr,α,β,αscale,'L')
+        # somehow this seems to circumvent a type-intersection bug in the compiler:
+        f() = GeneralizedPeriodicSchur(reverse(S),p,H1,Hr,Zr,α,β,αscale,'L')
+        return f()
     else
         return GeneralizedPeriodicSchur(S,1,H1,Hs,Z,α,β,αscale)
     end
