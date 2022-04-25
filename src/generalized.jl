@@ -1,5 +1,3 @@
-using LinearAlgebra: Givens, givensAlgorithm
-
 """
 GeneralizedPeriodicSchur
 

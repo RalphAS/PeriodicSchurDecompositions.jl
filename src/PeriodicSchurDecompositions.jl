@@ -9,9 +9,14 @@ setverbosity(j) = verbosity[] = j
 const slicot_shifts = Ref(true)
 
 import LinearAlgebra: lmul!, rmul!
-using LinearAlgebra: checksquare, require_one_based_indexing, reflector!, Givens
+using LinearAlgebra: checksquare, require_one_based_indexing
+using LinearAlgebra: reflector!, Givens, givensAlgorithm
 
 export pschur, pschur!, phessenberg!, gpschur, PeriodicSchur, GeneralizedPeriodicSchur
+
+struct NotImplemented <: Exception
+    msg::String
+end
 
 abstract type AbstractPeriodicSchur{T} end
 
@@ -875,6 +880,7 @@ end
 include("rschur2x2.jl")
 
 include("generalized.jl")
+include("utils.jl")
 
 function pschur!(A::AbstractVector{TA}, lr::Symbol=:R; kwargs...
                  ) where {TA<:AbstractMatrix{T}} where {T<:Complex}
