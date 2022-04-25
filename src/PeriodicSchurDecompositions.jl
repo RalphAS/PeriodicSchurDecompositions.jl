@@ -879,8 +879,10 @@ end
 
 include("rschur2x2.jl")
 
+    macro mydebug(expr); nothing; end
 include("generalized.jl")
 include("utils.jl")
+include("ordschur.jl")
 
 function pschur!(A::AbstractVector{TA}, lr::Symbol=:R; kwargs...
                  ) where {TA<:AbstractMatrix{T}} where {T<:Complex}

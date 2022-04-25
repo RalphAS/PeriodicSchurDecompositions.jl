@@ -13,6 +13,10 @@ pschur!
 gpschur
 ```
 
+```@docs
+LinearAlgebra.ordschur!(::AbstractPeriodicSchur, ::AbstractVector)
+```
+
 ## Periodic Hessenberg decompositions
 ```@docs
 phessenberg!

@@ -62,6 +62,10 @@ The result `gpS` is a `GeneralizedPeriodicSchur` object
 (see the docstring for further details; note that eigenvalues are stored in a
 decomposed form in this case).
 
+## Reordering eigenvalues
+
+Selected eigenvalues and their associated subspace can be moved to the top of
+a periodic Schur decomposition with `ordschur!` methods.
 
 ## References
 
