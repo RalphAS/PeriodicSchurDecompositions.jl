@@ -854,6 +854,14 @@ function pschur!(H1H::S1, Hs::AbstractVector{S};
         maxitleft -= its
         i = l - 1
     end # while, main loop
+    # next block is not in MB02WD, but needed to clear out dust.
+    # I probably applied a reflector or rotation to an extra row somewhere
+    # giving roundoff instead of 0
+    for i in 1:n-1
+      if isreal(λ[i])
+          H1[i+1,i] = 0
+      end
+    end
     if !wantZ
        Z = [similar(H1,0,0)]
     end

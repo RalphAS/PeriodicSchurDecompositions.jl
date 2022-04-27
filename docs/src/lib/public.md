@@ -14,7 +14,7 @@ gpschur
 ```
 
 ```@docs
-LinearAlgebra.ordschur!(::AbstractPeriodicSchur, ::AbstractVector)
+LinearAlgebra.ordschur!(::PeriodicSchurDecompositions.AbstractPeriodicSchur{T}, ::AbstractVector{Bool}) where {T <: Complex}
 ```
 
 ## Periodic Hessenberg decompositions

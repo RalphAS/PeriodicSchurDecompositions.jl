@@ -1,4 +1,5 @@
 using PeriodicSchurDecompositions
+using LinearAlgebra
 using Documenter
 
 DocMeta.setdocmeta!(PeriodicSchurDecompositions, :DocTestSetup, :(using PeriodicSchurDecompositions); recursive=true)

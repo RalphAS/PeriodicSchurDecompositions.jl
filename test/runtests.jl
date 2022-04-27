@@ -111,3 +111,5 @@ end
 end
 
 include("generalized.jl")
+
+include("ordschur.jl")
