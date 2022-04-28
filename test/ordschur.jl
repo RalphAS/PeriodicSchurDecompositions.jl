@@ -52,3 +52,84 @@ for T in [Float64, Complex{Float64}]
         end
     end
 end
+
+"""
+construct a periodic real Schur decomposition (left orientation, quasi-tri at left end)
+with conjugate eigvals in locations specified by jcs
+"""
+function mkrps(n,p,jcs,T=Float64; tri=false, check=false, nnfac=1e-2)
+    T1 = triu!(nnfac * rand(T,n,n))
+    Ts = [nnfac * triu!(rand(T,n,n)) for _ in 1:p-1]
+    jj = 0
+    λs = Vector{complex(T)}(undef,n)
+    local μ
+    for j in 1:n
+        if j-1 ∈ jcs
+            T1[j,j-1] = μ
+            T1[j-1,j] = -μ
+            λs[j] = 2.0^(2*jj)*(1-im)
+            λs[j-1] = 2.0^(2*jj)*(1+im)
+            for l in 1:p-1
+                # for reference, note that eigvals are very sensitive to these entries
+                Ts[l][j-1,j] = 0
+            end
+        else
+            jj += 1
+            μ = 2.0^(2*jj/p)
+            λs[j] = 2.0^(2*jj)
+        end
+        for l in 1:p-1
+            T1[j,j] = μ
+            Ts[l][j,j] = μ
+        end
+    end
+    if tri
+        Zs = [Matrix{T}(I,n,n) for _ in 1:p]
+    else
+        q,_ = qr(randn(T,n,n))
+        Zs = [Matrix(q)]
+        q,_ = qr(randn(T,n,n))
+        for l in 1:p-1
+            push!(Zs,Matrix(q))
+        end
+    end
+    As = [Zs[l+1]*Ts[l]*Zs[l]' for l in 1:p-1]
+    push!(As, Zs[1]*T1*Zs[p]')
+    ps = PeriodicSchur(T1,Ts,Zs,λs,'L',p)
+    check && pschur_check(As, ps)
+    return ps,As
+end
+
+for T in [Float64]
+    @testset "ordschur $T: conjugate pair(s)" begin
+        p = 5
+        n = 7
+        jcs = [3,6]
+        ps0, A = mkrps(n,p,jcs,T; tri=false)
+        λ0s = ps0.values # [a,b,z,z',c,w,w']
+        # println("initial vals:"); display(λ0s); println()
+        for (selset, str) in (([1,2,5],"ℂ,ℝ"),
+                              ([1,3,4],"ℝ,ℂ"),
+                              ([1,2,6,7],"ℂ,ℂ")
+                              )
+            @testset "$str" begin
+                select = falses(n)
+                nsel = length(selset)
+                select[selset] .= true
+                ps1 = deepcopy(ps0)
+                ps1 = ordschur!(ps1, select)
+                pschur_check(A, ps1; checkλ = false)
+                # println("T1:"); display(ps1.T1); println()
+                # NOTE: the following logic needs elaboration to test cases
+                # where user is too sloppy to select conjugates
+                λ1sel = ps1.values[1:nsel]
+                # println("$str expected,got:"); display(hcat(λ0s[selset],λ1sel)); println()
+                for j in 1:nsel
+                   λ0 = λ0s[selset[j]]
+                    # println("checking $λ0")
+                   @test any(λ1sel .≈ λ0)
+                end
+            end
+        end
+    end
+end

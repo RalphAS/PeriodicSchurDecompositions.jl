@@ -107,6 +107,21 @@ function LinearAlgebra.ordschur!(P::AbstractPeriodicSchur{T}, select::AbstractVe
     # TODO:
     # _rebalance!(P)
     _updateλ!(P)
+    # CHECKME: should this be done in the swap routines?
+    pair = false
+    λs = P.values
+    for j in 1:n
+        if pair
+            pair = false
+            continue
+        end
+        pair = !isreal(λs[j])
+        j0 = pair ? j+2 : j+1
+        A1[j0:n,j] .= 0
+        if pair
+            A1[j0:n,j+1] .= 0
+        end
+    end
     return P
 end
 

@@ -53,7 +53,7 @@ function _rpeigvals2x2( A1::AbstractMatrix{T},
 
     maxiter = 80
     ulp = eps(T)
-  if punting[]
+  if _punting[]
     # punt!
     Xc1 = Xs[1]
     Xcs = [Xs[l] for l in 2:k]
