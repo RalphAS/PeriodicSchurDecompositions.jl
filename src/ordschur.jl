@@ -57,7 +57,7 @@ function LinearAlgebra.ordschur!(P::AbstractPeriodicSchur{T}, select::AbstractVe
             if j != js
                 for i in j-1:-1:js
                     ok = _swapschur1!(Px,i,wantZ,Q)
-                    ok || throw(SingularException(j))
+                    ok || throw(IllConditionedException(j))
                 end
             end
         end

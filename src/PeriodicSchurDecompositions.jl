@@ -14,6 +14,17 @@ using LinearAlgebra: reflector!, Givens, givensAlgorithm
 
 export pschur, pschur!, phessenberg!, gpschur, PeriodicSchur, GeneralizedPeriodicSchur
 
+"""
+    IllConditionedException <: Exception
+
+Exception thrown when an operation on a Schur decomposition fails because of
+ill-conditioning. The `info` field may be the index of an eigenvalue associated with
+the failure.
+"""
+struct IllConditionedException <: Exception
+    info::Int
+end
+
 struct NotImplemented <: Exception
     msg::String
 end
@@ -359,6 +370,7 @@ function pschur!(H1H::S1, Hs::AbstractVector{S};
     # i is loop index, decreasing in steps of 1 or 2
     i = n
     local splitting # flag for control flow
+    local tst1
     while i >= 1
         verbosity[] > 0 && println("starting block i=$i")
         # eigvals i+1:n have converged

@@ -10,8 +10,9 @@ const _ss_verby = Ref(0)
 function _swapadjqr!(T1::AbstractMatrix{T},Ts,Zs,i1,p1,p2; sylcheck=false) where {T}
     tol = T(100)
     vb = _ss_verby[]
-    i2=i1+p1
-    i3=i2+p2-1
+    i2 = i1+p1
+    i2new = i1+p2
+    i3 = i2+p2-1
     pp = p1*p2
     tnrm = norm(view(T1,i1:i3,i1:i3))
     T11 = [T1[i1:i2-1,i1:i2-1]]
@@ -174,12 +175,7 @@ function _swapadjqr!(T1::AbstractMatrix{T},Ts,Zs,i1,p1,p2; sylcheck=false) where
         end
     end
     # sweep up the dust
-    if p2==1
-        T1[i1+1,i1] = 0
-    end
-    if p1==1
-        T1[i3,i3-1] = 0
-    end
+    T1[i2new:i3,i1:i2new-1] .= 0
     for l=1:k-1
         Tl = Ts[l]
         triu!(view(Tl,i1:i3,i1:i3))

@@ -94,7 +94,7 @@ function LinearAlgebra.ordschur!(P::AbstractPeriodicSchur{T}, select::AbstractVe
             if j != jdest
                 vb && println("moveblock $jsrc -> $jdest"); j0i=jsrc; j1i=jdest;
                 jsrc, jdest, ok = _moveblock!(Px, jsrc, jdest, wantZ, Q)
-                ok || error("move $jsrc -> $jdest failed, sorry.")
+                ok || throw(IllConditionedException(jsrc))
                 if jsrc != j0i || jdest != j1i
                     vb && println("actual $jsrc $jdest")
                 end
