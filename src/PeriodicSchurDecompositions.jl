@@ -415,7 +415,7 @@ function pschur!(H1H::S1, Hs::AbstractVector{S};
             # and current elements of tridiag band of ℍ
             local klast
             found = false
-            xmin = floatmax(T)
+            xmin = T(Inf)
             for k in i:-1:l+1
                 klast = k
                 # evaluate ℍ[k-1,k-m:k], m=1 or 2
@@ -442,6 +442,7 @@ function pschur!(H1H::S1, Hs::AbstractVector{S};
                 hsupdiag[n-i+k-1] = hh12
 
                 # test for negligible subdiagonal
+                xmin = min(xmin, abs(hh21))
                 tst1 = abs(hh11) + abs(hh22)
                 if tst1 == 0
                     tst1 = opnorm(view(H1,l:i,l:i),1)
@@ -461,7 +462,6 @@ function pschur!(H1H::S1, Hs::AbstractVector{S};
                     aa = max(abs(hh22), abs(hh11-hh22))
                     bb = min(abs(hh22), abs(hh11-hh22))
                     stmp = aa + ab
-                    xmin = min(xmin, hh21)
                     found = ba * (ab / stmp) <= max(smlnum, ulp*(bb * (aa/stmp)))
                     if !found && verbosity[] > 1
                         t1 = ba * (ab / stmp)
@@ -829,7 +829,8 @@ function pschur!(H1H::S1, Hs::AbstractVector{S};
                 else
                     # if two real eigvals and nontrivial chain, another rotation is needed
                     # otherwise use G computed above
-                    if jmax > 0 && hsubdiag[i-1] == 0
+                    realpair = jmax > 0 && hsubdiag[i-1] == 0
+                    if realpair
                         G, _ = givens(H1[i-1,i-1], H1[i,i-1], 1, 2)
                         verbosity[] > 1 && println("nontrivial chain, reals")
                     end
@@ -864,6 +865,15 @@ function pschur!(H1H::S1, Hs::AbstractVector{S};
                         end
                     elseif hh21 == 0
                         H1[i,i-1] = zero(T)
+                    end
+                    if realpair
+                        # sometimes the rotation swaps the eigvals
+                        λ[i-1] = H1[i-1,i-1]
+                        λ[i] = H1[i,i]
+                        for j in 1:p-1
+                            λ[i-1] *= Hs[j][i-1,i-1]
+                            λ[i] *= Hs[j][i,i]
+                        end
                     end
                 end # two real eigvals branch
             end # if wantT
