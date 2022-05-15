@@ -450,17 +450,24 @@ function pschur!(H1H::S1, Hs::AbstractVector{S};
                 # SLICOT has
                 # found = abs(hh21) <= max(ulp*tst1, smlnum)
 
-                # The following is from LAPACK (less prone to spurious convergence)
-                if abs(hh21) <= smlnum
+                # LAPACK has smlnum on the right, but that leads to pointless iterations
+                # for tiny eigvals
+                if abs(hh21) <= max(ulp^2*tst1, smlnum)
                     found = true
                 elseif abs(hh21) <= ulp*tst1
+                    # The following is from LAPACK (less prone to spurious convergence)
                     ab = max(abs(hh21), abs(hh12))
                     ba = min(abs(hh21), abs(hh12))
                     aa = max(abs(hh22), abs(hh11-hh22))
                     bb = min(abs(hh22), abs(hh11-hh22))
                     stmp = aa + ab
-                    xmin = min(xmin, stmp)
-                    found = ba * (ab / s) <= max(smlnum, ulp*(bb * (aa/s)))
+                    xmin = min(xmin, hh21)
+                    found = ba * (ab / stmp) <= max(smlnum, ulp*(bb * (aa/stmp)))
+                    if !found && verbosity[] > 1
+                        t1 = ba * (ab / stmp)
+                        t2 = ulp*(bb * (aa/stmp))
+                        println("missed AT criterion hh21=$hh21 vs $tst1; $t1 vs. $t2")
+                    end
                 end
                 if found
                     verbosity[] > 1 && println("k=$k hh21=$hh21")
