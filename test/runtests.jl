@@ -7,7 +7,7 @@ using Random
 using GenericSchur
 
 include("testfuncs.jl")
-
+include("krylov.jl")
 # Can't test exotic types unless someone implements
 # lmul!(HessenbergQ{T},Vector{T}), equiv. to LAPACK.ormhr!
 # or Matrix(HessenbergQ{T}), equiv to LAPACK.orghr!

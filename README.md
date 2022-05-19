@@ -1,6 +1,7 @@
 # PeriodicSchurDecompositions
 
 ![Lifecycle](https://img.shields.io/badge/lifecycle-experimental-orange.svg)
+<!-- ![Lifecycle](https://img.shields.io/badge/lifecycle-maturing-blue.svg) -->
 [![Build Status](https://github.com/RalphAS/PeriodicSchurDecompositions.jl/workflows/CI/badge.svg)](https://github.com/RalphAS/PeriodicSchurDecompositions.jl/actions)
 [![Coverage](https://codecov.io/gh/RalphAS/PeriodicSchurDecompositions.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/RalphAS/PeriodicSchurDecompositions.jl)
 [![Documentation](https://img.shields.io/badge/docs-dev-blue.svg)](https://RalphAS.github.io/PeriodicSchurDecompositions.jl/dev)
@@ -24,18 +25,25 @@ The principal reason for using the PSD is that accuracy may be lost if one
 forms the product of the `A_j` before eigen-analysis. For some applications the
 intermediate Schur vectors are also useful.
 
-This package currently provides a straightforward PSD for real element types.
+This package provides a straightforward PSD for real and complex element types.
 
 The basic API is as follows:
 ```julia
 p = period_of_your_problem()
 Aarg = [your_matrix(j) for j in 1:p]
-pS = pschur!(Aarg)
+pS = pschur!(Aarg, :R)
 your_eigvals = pS.values
 ```
-The result `pS` is a `PeriodicSchur` object (computation of the Schur vectors is
+The result `pS` is a `PeriodicSchur` object. Computation of the Schur vectors is
 fairly expensive, so it is an option set by keyword argument;
-see the docstring for further details).
+see the `pschur!` docstring for further details.
+
+### Operator ordering
+The `:R` argument above indicates that the product represented by `pS` is `prod(Aarg)`
+i.e., counting rightwards. In many applications it is more convenient to number
+the matrices leftwards (`A[p]*...*A[2]*A[1]`); this interpretation is available
+with an orientation argument `:L`.
+
 
 ## Generalized Periodic Schur decomposition
 Given a series of `NxN` matrices `A[j]`, `j=1...p`, and a signature vector
@@ -55,7 +63,7 @@ The basic API is as follows:
 p = period_of_your_problem()
 Aarg = [your_complex_matrix(j) for j in 1:p]
 S = [sign_for_your_problem(j) for j in 1:p]
-gpS = pschur!(Aarg, S)
+gpS = pschur!(Aarg, S, :R)
 your_eigvals = gpS.values
 ```
 The result `gpS` is a `GeneralizedPeriodicSchur` object
@@ -67,6 +75,34 @@ decomposed form in this case).
 Selected eigenvalues and their associated subspace can be moved to the top of
 a periodic Schur decomposition with `ordschur!` methods.
 
+## Large problems: periodic Krylov-Schur
+
+If only a few eigenvalues (and corresponding Schur vectors) are needed, it may be
+more efficient to use the Krylov-Schur algorithm implemented as
+
+```julia
+    pps, hist = partial_pschur(Avec, nev, which; kw...)
+```
+where `Avec` is a vector of either matrices or linear maps.
+The result is a `PartialPeriodicSchur` object `pps`, with a summary `hist` of the iteration.
+`pps` usually includes the `nev` eigenvalues near the edge of the convex hull of the
+spectrum specified by `which`.
+The interface is derived from the `ArnoldiMethod` package,
+q.v. for additional details.
+
+Note: `partial_pschur` is currently **only implemented for the leftwards orientation**.
+
+## Status
+This is a new package (2022) implementing complicated algorithms, so caveat emptor.
+Although tests to date indicate that the package is largely correct, there may be
+surprises; if you find any please file issues.
+
+Little effort has gone into optimization so far, and the package takes a while to compile.
+
+The API in v0.1 should be considered tentative; constructive suggestions for changes are
+welcome.
+
+
 ## References
 
 A. Bojanczyk, G. Golub, and P. Van Dooren, "The periodic Schur decomposition.
@@ -76,7 +112,7 @@ D. Kressner, thesis and assorted articles.
 
 ## Acknowledgements
 
-The meat of this package is mainly a translation of implementations in [the SLICOT library](https://github.com/SLICOT/SLICOT-Reference.git).
+Many functions in this package are translations of implementations in [the SLICOT library](https://github.com/SLICOT/SLICOT-Reference.git).
 
 Special thanks to Dr. A. Varga for making SLICOT available with a liberal license.
 

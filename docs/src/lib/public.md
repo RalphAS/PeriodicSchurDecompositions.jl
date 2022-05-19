@@ -17,6 +17,11 @@ gpschur
 LinearAlgebra.ordschur!(::PeriodicSchurDecompositions.AbstractPeriodicSchur{T}, ::AbstractVector{Bool}) where {T <: Complex}
 ```
 
+## Partial periodic Schur decompositions
+```@docs
+partial_pschur
+```
+
 ## Periodic Hessenberg decompositions
 ```@docs
 phessenberg!
@@ -29,5 +34,9 @@ PeriodicSchur
 
 ```@docs
 GeneralizedPeriodicSchur
+```
+
+```@docs
+PartialPeriodicSchur
 ```
 

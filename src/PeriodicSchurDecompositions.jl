@@ -916,7 +916,6 @@ end
 
 include("rschur2x2.jl")
 
-    macro mydebug(expr); nothing; end
 include("generalized.jl")
 include("utils.jl")
 include("ordschur.jl")
@@ -926,6 +925,8 @@ function pschur!(A::AbstractVector{TA}, lr::Symbol=:R; kwargs...
     gps = pschur!(A::AbstractVector{TA}, trues(length(A)), lr; kwargs...)
     PeriodicSchur(gps.T1, gps.T, gps.Z, gps.values, gps.orientation, gps.schurindex)
 end
+
+include("krylov.jl")
 
 end # module
 

@@ -5,16 +5,18 @@ version = "0.1.0-DEV"
 
 [deps]
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 MatrixFactorizations = "a3b82374-2e81-5b9e-98ce-41277c0e4c87"
+ArnoldiMethod = "ec485272-7323-5ecc-a04f-4719b315124d"
 
 [compat]
 MatrixFactorizations = "0.8,0.9"
+ArnoldiMethod = "0.1,0.2"
 julia = "1"
 
 [extras]
 GenericSchur = "c145ed77-6b09-5dd9-b285-bf645a82121e"
-Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test", "Random", "GenericSchur"]
+test = ["Test", "GenericSchur"]
