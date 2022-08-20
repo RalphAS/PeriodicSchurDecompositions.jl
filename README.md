@@ -75,6 +75,8 @@ decomposed form in this case).
 Selected eigenvalues and their associated subspace can be moved to the top of
 a periodic Schur decomposition with `ordschur!` methods.
 
+Currently reordering is only implemented for standard, not generalized, decompositions.
+
 ## Large problems: periodic Krylov-Schur
 
 If only a few eigenvalues (and corresponding Schur vectors) are needed, it may be

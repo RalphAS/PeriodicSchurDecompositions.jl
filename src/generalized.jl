@@ -29,7 +29,8 @@ Given `F::GeneralizedPeriodicSchur`, the (quasi) triangular Schur factor `Tₖ` 
 (The eigenvalues are stored internally in scaled form to avoid over/underflow.)
 """
 struct GeneralizedPeriodicSchur{Ty,
-                                St1<:AbstractMatrix, St<:AbstractMatrix, Sz<:AbstractMatrix,
+                                St1 <: AbstractMatrix, St <: AbstractMatrix,
+                                Sz <: AbstractMatrix,
                                 Ss} <: AbstractPeriodicSchur{Ty}
     S::Ss
     schurindex::Int
@@ -40,16 +41,18 @@ struct GeneralizedPeriodicSchur{Ty,
     β::Vector
     αscale::Vector{Int}
     orientation::Char
-    function GeneralizedPeriodicSchur{Ty,St1,St,Sz,Ss}(S::AbstractVector{Bool},
-                                                       schurindex::Int,
-                                                       T1::AbstractMatrix{Ty},
-                                                       T::Vector{<:AbstractMatrix{Ty}},
-                                                       Z::Vector{<:AbstractMatrix{Ty}},
-                                                       α::Vector{Ty},
-                                                       β::Vector{Ty},
-                                                       αscale::Vector{Int},
-                                                       orientation::Char
-                                                       ) where {Ty,St1,St,Sz,Ss}
+    function GeneralizedPeriodicSchur{Ty, St1, St, Sz, Ss}(S::AbstractVector{Bool},
+                                                           schurindex::Int,
+                                                           T1::AbstractMatrix{Ty},
+                                                           T::Vector{<:AbstractMatrix{Ty}},
+                                                           Z::Vector{<:AbstractMatrix{Ty}},
+                                                           α::Vector{Ty},
+                                                           β::Vector{Ty},
+                                                           αscale::Vector{Int},
+                                                           orientation::Char) where {Ty,
+                                                                                     St1,
+                                                                                     St, Sz,
+                                                                                     Ss}
         # maybe enforce sanity?
         new(S, schurindex, T1, T, Z, α, β, αscale, orientation)
     end
@@ -61,26 +64,28 @@ function GeneralizedPeriodicSchur(S::Ss, schurindex::Int,
                                   α::Vector,
                                   β::Vector,
                                   αscale::Vector,
-                                  orientation::Char='R'
-                                  ) where {St1<:AbstractMatrix{Ty},
-                                           Ss<:AbstractVector{Bool}
-                                           } where {Ty}
+                                  orientation::Char = 'R') where {St1 <: AbstractMatrix{Ty},
+                                                                  Ss <:
+                                                                  AbstractVector{Bool}
+                                                                  } where {Ty}
     GeneralizedPeriodicSchur{Ty, St1, eltype(T), eltype(Z), Ss}(S, schurindex, T1, T, Z,
                                                                 α, β, αscale, orientation)
 end
-function Base.getproperty(P::GeneralizedPeriodicSchur{T},s::Symbol) where {T}
+function Base.getproperty(P::GeneralizedPeriodicSchur{T}, s::Symbol) where {T}
     if s == :values
-        return P.α ./ P.β .* T(2*one(real(T))) .^ P.αscale
+        return P.α ./ P.β .* T(2 * one(real(T))) .^ P.αscale
     elseif s == :period
         return length(P.S)
     else
-        return getfield(P,s)
+        return getfield(P, s)
     end
 end
-Base.propertynames(P::GeneralizedPeriodicSchur) = (:period, :values, fieldnames(typeof(P))...)
+function Base.propertynames(P::GeneralizedPeriodicSchur)
+    (:period, :values, fieldnames(typeof(P))...)
+end
 
-function pschur(A::AbstractVector{MT}, S::AbstractVector{Bool}, lr::Symbol=:R; kwargs...
-                ) where {MT<:AbstractMatrix{T}} where {T}
+function pschur(A::AbstractVector{MT}, S::AbstractVector{Bool}, lr::Symbol = :R;
+                kwargs...) where {MT <: AbstractMatrix{T}} where {T}
     Atmp = [copy(Aj) for Aj in A]
     pschur!(Atmp, S, lr; kwargs...)
 end
@@ -100,15 +105,15 @@ matrices. See [`GeneralizedPeriodicSchur`](@ref) for the resulting structure.
 (`S[j]=false` corresponds to `sⱼ=-1` in the decomposition shown there.)
 """
 function pschur!(A::AbstractVector{TA}, S::AbstractVector{Bool},
-                 lr::Symbol=:R;
-                 wantZ::Bool=true, wantT::Bool=true,
-                 ) where {TA<:AbstractMatrix{T}} where {T<:Complex}
+                 lr::Symbol = :R;
+                 wantZ::Bool = true,
+                 wantT::Bool = true) where {TA <: AbstractMatrix{T}} where {T <: Complex}
     orient = char_lr(lr)
     p = length(A)
     if orient == 'L'
         Aarg = similar(A)
         for j in 1:p
-            Aarg[j] = A[p+1-j]
+            Aarg[j] = A[p + 1 - j]
         end
         Sarg = reverse(S)
     else
@@ -116,25 +121,27 @@ function pschur!(A::AbstractVector{TA}, S::AbstractVector{Bool},
         Sarg = S
     end
     if all(S)
-        H1,pH = phessenberg!(Aarg)
+        H1, pH = phessenberg!(Aarg)
         if wantZ
             Q = [_materializeQ(H1)]
-            for j in 1:p-1
+            for j in 1:(p - 1)
                 push!(Q, Matrix(pH[j].Q))
             end
         else
             Q = nothing
         end
-        Hs = [pH[j].R for j in 1:p-1]
-        H1.H .= triu(H1.H,-1)
-        F = pschur!(H1.H, Hs, Sarg, wantT=wantT, wantZ=wantZ, Q=Q, rev=(orient == 'L'))
+        Hs = [pH[j].R for j in 1:(p - 1)]
+        H1.H .= triu(H1.H, -1)
+        F = pschur!(H1.H, Hs, Sarg, wantT = wantT, wantZ = wantZ, Q = Q,
+                    rev = (orient == 'L'))
     else
         # check this here so error message is less confusing
         Sarg[1] || throw(ArgumentError("The leftmost entry in S must be true"))
-        Hs,Qs = _phessenberg!(Aarg,Sarg)
+        Hs, Qs = _phessenberg!(Aarg, Sarg)
         H1 = popfirst!(Hs)
         Q = wantZ ? Qs : nothing
-        F = pschur!(H1, Hs, Sarg, wantT=wantT, wantZ=wantZ, Q=Q, rev=(orient == 'L'))
+        F = pschur!(H1, Hs, Sarg, wantT = wantT, wantZ = wantZ, Q = Q,
+                    rev = (orient == 'L'))
     end
     return F
 end
@@ -142,40 +149,41 @@ end
 # We make this a macro so that @warn may usefully report the context.
 macro _checkforms()
     return esc(quote
-        if norm(tril(H1,-2)) > 1e-5
-            @warn("H1 not Hessenberg")
-        end
-        for l in 1:p-1
-            if norm(tril(Hs[l],-1)) > 1e-5
-                @warn("H[$(l-1)] is not triangular")
-            end
-        end
-    end)
+                   if norm(tril(H1, -2)) > 1e-5
+                       @warn("H1 not Hessenberg")
+                   end
+                   for l in 1:(p - 1)
+                       if norm(tril(Hs[l], -1)) > 1e-5
+                           @warn("H[$(l-1)] is not triangular")
+                       end
+                   end
+               end)
 end
 
 # Mainly translated from SLICOT MB03BZ, by D.Kressner and V.Sima
 # MB03BZ is Copyright (c) 2002-2020 NICONET e.V.
 function pschur!(H1H::Th1, Hs::AbstractVector{Th},
-                 S::AbstractVector{Bool}=trues(length(Hs)+1);
-                 wantZ::Bool=true, wantT::Bool=true,
-                 Q::Union{Nothing,Vector{Tq}}=nothing, maxitfac=30,
-                 rev::Bool=false
-                 ) where {Th1<:Union{UpperHessenberg{T}, StridedMatrix{T}},
-                          Th<:StridedMatrix{T},
-                          Tq<:StridedMatrix{T},
-                          } where {T<:Complex}
-    p = length(Hs)+1
+                 S::AbstractVector{Bool} = trues(length(Hs) + 1);
+                 wantZ::Bool = true, wantT::Bool = true,
+                 Q::Union{Nothing, Vector{Tq}} = nothing, maxitfac = 30,
+                 rev::Bool = false) where {
+                                           Th1 <:
+                                           Union{UpperHessenberg{T}, StridedMatrix{T}},
+                                           Th <: StridedMatrix{T},
+                                           Tq <: StridedMatrix{T}
+                                           } where {T <: Complex}
+    p = length(Hs) + 1
     n = checksquare(H1H)
-    for l in 1:p-1
+    for l in 1:(p - 1)
         n1 = checksquare(Hs[l])
         n1 == n || throw(DimensionMismatch("H matrices must have the same size"))
     end
     S[1] || throw(ArgumentError("Signature entry S[1] must be true"))
 
     TR = real(T)
-    α = zeros(T,n)
-    β = zeros(T,n)
-    αscale = zeros(Int,n)
+    α = zeros(T, n)
+    β = zeros(T, n)
+    αscale = zeros(Int, n)
 
     safmin = floatmin(real(T))
     unfl = floatmin(real(T))
@@ -184,7 +192,7 @@ function pschur!(H1H::Th1, Hs::AbstractVector{Th},
     smlnum = unfl * (n / ulp)
 
     H1 = _gethess!(H1H)
-    Hp = p==1 ? H1 : Hs[p-1]
+    Hp = p == 1 ? H1 : Hs[p - 1]
 
     # decide whether we need an extra iteration w/ controlled zero shift
     ziter = (p >= log2(floatmin(TR)) / log2(ulp)) ? -1 : 0
@@ -196,21 +204,21 @@ function pschur!(H1H::Th1, Hs::AbstractVector{Th},
 
     if wantZ
         if Q === nothing
-            Z = [Matrix{T}(I,n,n) for l in 1:p]
+            Z = [Matrix{T}(I, n, n) for l in 1:p]
         else
             for l in 1:p
-                if size(Q[l],2) != n
+                if size(Q[l], 2) != n
                     throw(DimensionMismatch("second dimension of Q's must agree w/ H"))
                 end
             end
             Z = Q
         end
     else
-        Z = Vector{Matrix{T}}(undef,0)
+        Z = Vector{Matrix{T}}(undef, 0)
     end
 
-    Gtmp = Vector{Givens{T}}(undef,n)
-    v4ev = zeros(T,p-1)
+    Gtmp = Vector{Givens{T}}(undef, n)
+    v4ev = zeros(T, p - 1)
 
     ilast = n
     ifirst = -1
@@ -221,7 +229,9 @@ function pschur!(H1H::Th1, Hs::AbstractVector{Th},
 
     # diagnostic routines
     function showmat(str, j)
-        print(str," H[$j] "); show(stdout, "text/plain", j==1 ? H1 : Hs[j-1]); println()
+        print(str, " H[$j] ")
+        show(stdout, "text/plain", j == 1 ? H1 : Hs[j - 1])
+        println()
         nothing
     end
     function showallmats(str)
@@ -234,26 +244,28 @@ function pschur!(H1H::Th1, Hs::AbstractVector{Th},
         if verbosity[] > 1 && p > 1
             Htmp = copy(H1)
             for l in 2:p
-                Htmp = Htmp * Hs[l-1]
+                Htmp = Htmp * Hs[l - 1]
             end
-            print(str," ℍ "); show(stdout, "text/plain", Htmp); println()
-            println("  ev: ",eigvals(Htmp)')
+            print(str, " ℍ ")
+            show(stdout, "text/plain", Htmp)
+            println()
+            println("  ev: ", eigvals(Htmp)')
         end
         nothing
     end
 
     # computational routines
 
-    function check_deflate_hess(H1,ilo,ilast)
+    function check_deflate_hess(H1, ilo, ilast)
         jlo = ilo
-        for j in ilast:-1:ilo+1
-            tol = abs(H1[j-1,j-1]) + abs(H1[j,j])
+        for j in ilast:-1:(ilo + 1)
+            tol = abs(H1[j - 1, j - 1]) + abs(H1[j, j])
             if tol == 0
-                tol = opnorm(view(H1,ilo:j,ilo:j),1)
+                tol = opnorm(view(H1, ilo:j, ilo:j), 1)
             end
-            tol = max(ulp*tol, smlnum)
-            if abs(H1[j,j-1]) <= tol
-                H1[j,j-1] = zero(T)
+            tol = max(ulp * tol, smlnum)
+            if abs(H1[j, j - 1]) <= tol
+                H1[j, j - 1] = zero(T)
                 jlo = j
                 if j == ilast
                     return true, jlo
@@ -261,28 +273,28 @@ function pschur!(H1H::Th1, Hs::AbstractVector{Th},
                 break
             end
         end
-        return false,jlo
+        return false, jlo
     end
 
-    function check_deflate_tr(Hl,jlo,ilast)
+    function check_deflate_tr(Hl, jlo, ilast)
         for j in ilast:-1:jlo
             if j == ilast
-                tol = abs(Hl[j-1,j])
-            elseif j==jlo
-                tol = abs(Hl[j,j+1])
+                tol = abs(Hl[j - 1, j])
+            elseif j == jlo
+                tol = abs(Hl[j, j + 1])
             else
-                tol = abs(Hl[j-1,j]) + abs(Hl[j,j+1])
+                tol = abs(Hl[j - 1, j]) + abs(Hl[j, j + 1])
             end
             if tol == 0
-                tol = opnorm(UpperTriangular(view(Hl,jlo:j,jlo:j)),1)
+                tol = opnorm(UpperTriangular(view(Hl, jlo:j, jlo:j)), 1)
             end
             tol = max(ulp * tol, smlnum)
-            if abs(Hl[j,j]) <= tol
-                Hl[j,j] = zero(T)
-                return true,j
+            if abs(Hl[j, j]) <= tol
+                Hl[j, j] = zero(T)
+                return true, j
             end
         end
-        return false,0
+        return false, 0
     end
 
     done = false
@@ -315,8 +327,8 @@ function pschur!(H1H::Th1, Hs::AbstractVector{Th},
             deflate_pos = false
             for l in 2:p
                 if S[l]
-                    Hl = Hs[l-1]
-                    deflate_pos,jx = check_deflate_tr(Hl, jlo, ilast)
+                    Hl = Hs[l - 1]
+                    deflate_pos, jx = check_deflate_tr(Hl, jlo, ilast)
                     if deflate_pos
                         ldeflate = l
                         jdeflate = jx
@@ -329,8 +341,8 @@ function pschur!(H1H::Th1, Hs::AbstractVector{Th},
             deflate_neg = false
             for l in 2:p
                 if !S[l]
-                    Hl = Hs[l-1]
-                    deflate_neg,jx = check_deflate_tr(Hl, jlo, ilast)
+                    Hl = Hs[l - 1]
+                    deflate_neg, jx = check_deflate_tr(Hl, jlo, ilast)
                     if deflate_neg
                         ldeflate = l
                         jdeflate = jx
@@ -343,77 +355,78 @@ function pschur!(H1H::Th1, Hs::AbstractVector{Th},
             if ziter >= 7 || ziter < 0
                 verbosity[] > 0 && println("controlled zero shift")
                 # triangularize Hessenberg
-                for j in jlo:ilast-1
-                    c,s,r = givensAlgorithm(H1[j,j], H1[j+1,j])
-                    H1[j,j] = r
-                    H1[j+1,j] = zero(T)
-                    G = Givens(j,j+1, complex(c), s)
-                    lmul!(G, view(H1,:,j+1:ilastm))
+                for j in jlo:(ilast - 1)
+                    c, s, r = givensAlgorithm(H1[j, j], H1[j + 1, j])
+                    H1[j, j] = r
+                    H1[j + 1, j] = zero(T)
+                    G = Givens(j, j + 1, complex(c), s)
+                    lmul!(G, view(H1, :, (j + 1):ilastm))
                     Gtmp[j] = G
                 end
                 if wantZ
-                    for j in jlo:ilast-1
+                    for j in jlo:(ilast - 1)
                         rmul!(Z[1], Gtmp[j]')
                     end
                 end
                 # propagate transformations back to H1
                 for l in p:-1:2
-                    Hl = Hs[l-1]
+                    Hl = Hs[l - 1]
                     if S[l]
-                        for j in jlo:ilast-1
+                        for j in jlo:(ilast - 1)
                             G = Gtmp[j]
                             if G.s != 0
-                                rmul!(view(Hl,ifirstm:j+1,:), Gtmp[j]')
+                                rmul!(view(Hl, ifirstm:(j + 1), :), Gtmp[j]')
                                 # check for deflation
-                                tol = abs(Hl[j,j]) + abs(Hl[j+1,j+1])
+                                tol = abs(Hl[j, j]) + abs(Hl[j + 1, j + 1])
                                 if tol == 0
-                                    tol = opnorm(view(Hl,jlo:j+1,jlo:j+1),1)
+                                    tol = opnorm(view(Hl, jlo:(j + 1), jlo:(j + 1)), 1)
                                 end
-                                tol = max(ulp*tol, smlnum)
-                                if abs(Hl[j+1,j]) <= tol
-                                    c,s = one(T),zero(T)
-                                    Hl[j+1,j] = zero(T)
-                                    G = Givens(j,j+1,complex(c),s)
+                                tol = max(ulp * tol, smlnum)
+                                if abs(Hl[j + 1, j]) <= tol
+                                    c, s = one(T), zero(T)
+                                    Hl[j + 1, j] = zero(T)
+                                    G = Givens(j, j + 1, complex(c), s)
                                     Gtmp[j] = G
                                 else
-                                    c,s,r = givensAlgorithm(Hl[j,j], Hl[j+1,j])
-                                    Hl[j,j] = r
-                                    Hl[j+1,j] = zero(T)
-                                    G = Givens(j,j+1,complex(c),s)
-                                    lmul!(G, view(Hl, :,j+1:ilastm))
+                                    c, s, r = givensAlgorithm(Hl[j, j], Hl[j + 1, j])
+                                    Hl[j, j] = r
+                                    Hl[j + 1, j] = zero(T)
+                                    G = Givens(j, j + 1, complex(c), s)
+                                    lmul!(G, view(Hl, :, (j + 1):ilastm))
                                     Gtmp[j] = G
                                 end
                             end
                         end # j loop
                     else # not S[l]
-                        for j in jlo:ilast-1
+                        for j in jlo:(ilast - 1)
                             G = Gtmp[j]
                             if G.s != 0
                                 lmul!(G, view(Hl, :, j:ilastm))
                                 # check for deflation
-                                tol = abs(Hl[j,j]) + abs(Hl[j+1,j+1])
+                                tol = abs(Hl[j, j]) + abs(Hl[j + 1, j + 1])
                                 if tol == 0
-                                    tol = opnorm(view(Hl,jlo:j+1,jlo:j+1),1)
+                                    tol = opnorm(view(Hl, jlo:(j + 1), jlo:(j + 1)), 1)
                                 end
-                                tol = max(ulp*tol, smlnum)
-                                if abs(Hl[j+1,j]) <= tol
-                                    c,s = one(T),zero(T)
-                                    Hl[j+1,j] = zero(T)
-                                    G = Givens(j,j+1,complex(c),-s)
+                                tol = max(ulp * tol, smlnum)
+                                if abs(Hl[j + 1, j]) <= tol
+                                    c, s = one(T), zero(T)
+                                    Hl[j + 1, j] = zero(T)
+                                    G = Givens(j, j + 1, complex(c), -s)
                                     Gtmp[j] = G
                                 else
-                                    c,s,r = givensAlgorithm(Hl[j+1,j+1], Hl[j+1,j])
-                                    Hl[j+1,j+1] = r
-                                    Hl[j+1,j] = zero(T)
-                                    G = Givens(j+1,j,complex(c),s') # backwards!
+                                    c, s, r = givensAlgorithm(Hl[j + 1, j + 1],
+                                                              Hl[j + 1, j])
+                                    Hl[j + 1, j + 1] = r
+                                    Hl[j + 1, j] = zero(T)
+                                    G = Givens(j + 1, j, complex(c), s') # backwards!
                                     rmul!(view(Hl, ifirstm:j, :), G')
-                                    Gtmp[j] = Givens(j,j+1,complex(c),-s)
+                                    Gtmp[j] = Givens(j, j + 1, complex(c), -s)
                                 end
                             end
                         end
                     end
                     if wantZ
-                        for j in jlo:ilast-1
+                        for j in jlo:(ilast - 1)
                             rmul!(Z[l], Gtmp[j]')
                         end
                     end
@@ -421,9 +434,9 @@ function pschur!(H1H::Th1, Hs::AbstractVector{Th},
 
                 # Apply transformations to right side of Hessenberg factor
                 ziter = 0
-                for j in jlo:ilast-1
+                for j in jlo:(ilast - 1)
                     G = Gtmp[j]
-                    rmul!(view(H1, ifirstm:j+1, :), G')
+                    rmul!(view(H1, ifirstm:(j + 1), :), G')
                     if G.s == 0
                         ziter = 1
                     end
@@ -437,22 +450,23 @@ function pschur!(H1H::Th1, Hs::AbstractVector{Th},
         # Handle deflations
 
         if deflate_pos # Case II (170)
-            verbosity[] > 0 && println("deflating S+ l=$ldeflate j=$jdeflate $ifirst:$ilast")
+            verbosity[] > 0 &&
+                println("deflating S+ l=$ldeflate j=$jdeflate $ifirst:$ilast")
             # Do an unshifted pQZ step
 
             verbosity[] > 2 && showallmats("before deflation jlo=$jlo")
 
             # left of Hessenberg
-            for j in jlo:jdeflate-1
-                c,s,r = givensAlgorithm(H1[j,j], H1[j+1,j])
-                H1[j,j] = r
-                H1[j+1,j] = 0
-                G = Givens(j,j+1,complex(c),s)
-                lmul!(G, view(H1, :, j+1:ilastm))
+            for j in jlo:(jdeflate - 1)
+                c, s, r = givensAlgorithm(H1[j, j], H1[j + 1, j])
+                H1[j, j] = r
+                H1[j + 1, j] = 0
+                G = Givens(j, j + 1, complex(c), s)
+                lmul!(G, view(H1, :, (j + 1):ilastm))
                 Gtmp[j] = G
             end
             if wantZ
-                for j in jlo:jdeflate-1
+                for j in jlo:(jdeflate - 1)
                     rmul!(Z[1], Gtmp[j]')
                 end
             end
@@ -460,27 +474,27 @@ function pschur!(H1H::Th1, Hs::AbstractVector{Th},
             for l in p:-1:2
                 # due to zero on diagonal of H[ldeflate], decrement count
                 ntra = (l < ldeflate) ? (jdeflate - 2) : (jdeflate - 1)
-                Hl = Hs[l-1]
+                Hl = Hs[l - 1]
                 if S[l]
                     for j in jlo:ntra
                         G = Gtmp[j]
-                        rmul!(view(Hl, ifirstm:j+1, :), Gtmp[j]')
-                        c,s,r = givensAlgorithm(Hl[j,j], Hl[j+1,j])
-                        Hl[j,j] = r
-                        Hl[j+1,j] = 0
-                        G = Givens(j,j+1,complex(c),s)
-                        lmul!(G, view(Hl, :, j+1:ilastm))
+                        rmul!(view(Hl, ifirstm:(j + 1), :), Gtmp[j]')
+                        c, s, r = givensAlgorithm(Hl[j, j], Hl[j + 1, j])
+                        Hl[j, j] = r
+                        Hl[j + 1, j] = 0
+                        G = Givens(j, j + 1, complex(c), s)
+                        lmul!(G, view(Hl, :, (j + 1):ilastm))
                         Gtmp[j] = G
                     end
                 else
                     for j in jlo:ntra
                         lmul!(Gtmp[j], view(Hl, :, j:ilastm))
-                        c,s,r = givensAlgorithm(Hl[j+1,j+1],Hl[j+1,j])
-                        Hl[j+1,j+1] = r
-                        Hl[j+1,j] = 0
-                        G = Givens(j+1,j,complex(c),s')
+                        c, s, r = givensAlgorithm(Hl[j + 1, j + 1], Hl[j + 1, j])
+                        Hl[j + 1, j + 1] = r
+                        Hl[j + 1, j] = 0
+                        G = Givens(j + 1, j, complex(c), s')
                         rmul!(view(Hl, ifirstm:j, :), G')
-                        Gtmp[j] = Givens(j,j+1, complex(c), -s)
+                        Gtmp[j] = Givens(j, j + 1, complex(c), -s)
                     end
                 end
                 if wantZ
@@ -490,62 +504,62 @@ function pschur!(H1H::Th1, Hs::AbstractVector{Th},
                 end
             end
             # right of Hessenberg
-            for j in jlo:jdeflate-2
-                rmul!(view(H1, ifirstm:j+1, :), Gtmp[j]')
+            for j in jlo:(jdeflate - 2)
+                rmul!(view(H1, ifirstm:(j + 1), :), Gtmp[j]')
             end
 
             # Do another unshifted periodic QZ step
             # right of Hessenberg
-            for j in ilast:-1:jdeflate+1
-                c,s,r = givensAlgorithm(H1[j,j], H1[j,j-1])
-                H1[j,j] = r
-                H1[j,j-1] = 0
-                G = Givens(j,j-1,complex(c),s')
-                rmul!(view(H1,ifirstm:j-1,:), G')
-                Gtmp[j] = Givens(j-1,j,complex(c),-s)
+            for j in ilast:-1:(jdeflate + 1)
+                c, s, r = givensAlgorithm(H1[j, j], H1[j, j - 1])
+                H1[j, j] = r
+                H1[j, j - 1] = 0
+                G = Givens(j, j - 1, complex(c), s')
+                rmul!(view(H1, ifirstm:(j - 1), :), G')
+                Gtmp[j] = Givens(j - 1, j, complex(c), -s)
             end
             if wantZ
-                for j in ilast:-1:jdeflate+1
+                for j in ilast:-1:(jdeflate + 1)
                     rmul!(Z[2], Gtmp[j]')
                 end
             end
             # propagate through triangular matrices
             for l in 2:p
                 ntra = l > ldeflate ? (jdeflate + 2) : (jdeflate + 1)
-                Hl = Hs[l-1]
+                Hl = Hs[l - 1]
                 if !S[l]
                     for j in ilast:-1:ntra
                         rmul!(view(Hl, ifirstm:j, :), Gtmp[j]')
-                        c,s,r = givensAlgorithm(Hl[j-1,j-1], Hl[j,j-1])
-                        Hl[j-1,j-1] = r
-                        Hl[j,j-1] = 0
-                        G = Givens(j-1,j,complex(c),s)
+                        c, s, r = givensAlgorithm(Hl[j - 1, j - 1], Hl[j, j - 1])
+                        Hl[j - 1, j - 1] = r
+                        Hl[j, j - 1] = 0
+                        G = Givens(j - 1, j, complex(c), s)
                         lmul!(G, view(Hl, :, j:ilastm))
-                        Gtmp[j] = Givens(j-1,j,complex(c),s)
+                        Gtmp[j] = Givens(j - 1, j, complex(c), s)
                     end
                 else
                     for j in ilast:-1:ntra
                         G = Gtmp[j]
-                        lmul!(Gtmp[j], view(Hl, :, j-1:ilastm))
-                        c,s,r = givensAlgorithm(Hl[j,j], Hl[j,j-1])
-                        Hl[j,j] = r
-                        Hl[j,j-1] = 0
-                        G = Givens(j,j-1,complex(c),s')
-                        rmul!(view(Hl, ifirstm:j-1, :), G')
-                        Gtmp[j] = Givens(j-1,j,complex(c),-s)
+                        lmul!(Gtmp[j], view(Hl, :, (j - 1):ilastm))
+                        c, s, r = givensAlgorithm(Hl[j, j], Hl[j, j - 1])
+                        Hl[j, j] = r
+                        Hl[j, j - 1] = 0
+                        G = Givens(j, j - 1, complex(c), s')
+                        rmul!(view(Hl, ifirstm:(j - 1), :), G')
+                        Gtmp[j] = Givens(j - 1, j, complex(c), -s)
                     end
                 end
                 if wantZ
-                    ln = mod(l,p) + 1
+                    ln = mod(l, p) + 1
                     for j in ilast:-1:ntra
                         rmul!(Z[ln], Gtmp[j]')
                     end
                 end
             end
             # left of Hessenberg
-            for j in ilast:-1:jdeflate+2
+            for j in ilast:-1:(jdeflate + 2)
                 G = Gtmp[j]
-                lmul!(Gtmp[j], view(H1, :, j-1:ilastm))
+                lmul!(Gtmp[j], view(H1, :, (j - 1):ilastm))
             end
             verbosity[] > 2 && showallmats("after deflation")
             doqziter = false
@@ -554,181 +568,181 @@ function pschur!(H1H::Th1, Hs::AbstractVector{Th},
             verbosity[] > 0 && println("deflating S- l=$ldeflate j=$jdeflate")
             if jdeflate > (ilast - jlo + 1) / 2 # bottom half
                 # chase the zero down
-                for j1 in jdeflate:ilast-1
+                for j1 in jdeflate:(ilast - 1)
                     j = j1
-                    Hl = Hs[ldeflate-1]
-                    c,s,r = givensAlgorithm(Hl[j,j+1], Hl[j+1,j+1])
-                    Hl[j,j+1] = r
-                    Hl[j+1,j+1] = 0
-                    G = Givens(j,j+1,complex(c),s)
-                    lmul!(G, view(Hl, :, j+2:ilastm))
-                    ln = mod(ldeflate,p) + 1
+                    Hl = Hs[ldeflate - 1]
+                    c, s, r = givensAlgorithm(Hl[j, j + 1], Hl[j + 1, j + 1])
+                    Hl[j, j + 1] = r
+                    Hl[j + 1, j + 1] = 0
+                    G = Givens(j, j + 1, complex(c), s)
+                    lmul!(G, view(Hl, :, (j + 2):ilastm))
+                    ln = mod(ldeflate, p) + 1
                     if wantZ
-                        rmul!(Z[ln],G')
+                        rmul!(Z[ln], G')
                     end
-                    for l in 1:p-1
+                    for l in 1:(p - 1)
                         if ln == 1
-                            lmul!(G, view(H1,:,j-1:ilastm))
-                            c,s,r = givensAlgorithm(H1[j+1,j], H1[j+1,j-1])
-                            H1[j+1,j] = r
-                            H1[j+1,j-1] = 0
-                            G = Givens(j,j-1,complex(c),s')
+                            lmul!(G, view(H1, :, (j - 1):ilastm))
+                            c, s, r = givensAlgorithm(H1[j + 1, j], H1[j + 1, j - 1])
+                            H1[j + 1, j] = r
+                            H1[j + 1, j - 1] = 0
+                            G = Givens(j, j - 1, complex(c), s')
                             rmul!(view(H1, ifirstm:j, :), G')
-                            G = Givens(j-1,j,complex(c),-s)
+                            G = Givens(j - 1, j, complex(c), -s)
                             j -= 1
                         elseif S[ln]
-                            Hln = Hs[ln-1]
+                            Hln = Hs[ln - 1]
                             lmul!(G, view(Hln, :, j:ilastm))
-                            c,s,r = givensAlgorithm(Hln[j+1,j+1], Hln[j+1,j])
-                            Hln[j+1,j+1] = r
-                            Hln[j+1,j] = 0
-                            G = Givens(j+1,j,complex(c),s')
+                            c, s, r = givensAlgorithm(Hln[j + 1, j + 1], Hln[j + 1, j])
+                            Hln[j + 1, j + 1] = r
+                            Hln[j + 1, j] = 0
+                            G = Givens(j + 1, j, complex(c), s')
                             rmul!(view(Hln, ifirstm:j, :), G')
-                            G = Givens(j,j+1,complex(c),-s)
+                            G = Givens(j, j + 1, complex(c), -s)
                         else
-                            Hln = Hs[ln-1]
-                            rmul!(view(Hln, ifirstm:j+1, :), G')
-                            c,s,r = givensAlgorithm(Hln[j,j], Hln[j+1,j])
-                            Hln[j,j] = r
-                            Hln[j+1,j] = 0
-                            G = Givens(j,j+1,complex(c),s)
-                            lmul!(G, view(Hln, :, j+1:ilastm))
+                            Hln = Hs[ln - 1]
+                            rmul!(view(Hln, ifirstm:(j + 1), :), G')
+                            c, s, r = givensAlgorithm(Hln[j, j], Hln[j + 1, j])
+                            Hln[j, j] = r
+                            Hln[j + 1, j] = 0
+                            G = Givens(j, j + 1, complex(c), s)
+                            lmul!(G, view(Hln, :, (j + 1):ilastm))
                         end
-                        ln = mod(ln,p) + 1
+                        ln = mod(ln, p) + 1
                         if wantZ
                             rmul!(Z[ln], G')
                         end
                     end # l loop
-                    Hl = Hs[ldeflate-1]
+                    Hl = Hs[ldeflate - 1]
                     rmul!(view(Hl, ifirstm:j, :), G')
                 end # j1 loop (340)
                 # deflate last element in Hessenberg
                 j = ilast
-                c,s,r = givensAlgorithm(H1[j,j], H1[j,j-1])
-                H1[j,j] = r
-                H1[j,j-1] = 0
-                G = Givens(j,j-1,complex(c),s')
-                rmul!(view(H1, ifirstm:j-1, :), G')
-                G = Givens(j-1,j,complex(c),-s)
+                c, s, r = givensAlgorithm(H1[j, j], H1[j, j - 1])
+                H1[j, j] = r
+                H1[j, j - 1] = 0
+                G = Givens(j, j - 1, complex(c), s')
+                rmul!(view(H1, ifirstm:(j - 1), :), G')
+                G = Givens(j - 1, j, complex(c), -s)
                 if wantZ
                     rmul!(Z[2], G')
                 end
-                for l in 2:ldeflate-1
-                    Hl = Hs[l-1]
+                for l in 2:(ldeflate - 1)
+                    Hl = Hs[l - 1]
                     if !S[l]
                         rmul!(view(Hl, ifirstm:j, :), G')
-                        c,s,r = givensAlgorithm(Hl[j-1,j-1], Hl[j,j-1])
-                        Hl[j-1,j-1] = r
-                        Hl[j,j-1] = 0
-                        G = Givens(j-1,j,complex(c),s)
+                        c, s, r = givensAlgorithm(Hl[j - 1, j - 1], Hl[j, j - 1])
+                        Hl[j - 1, j - 1] = r
+                        Hl[j, j - 1] = 0
+                        G = Givens(j - 1, j, complex(c), s)
                         lmul!(G, view(Hl, :, j:ilastm))
                     else
-                        lmul!(G, view(Hl, :, j-1:ilastm))
-                        c,s,r = givensAlgorithm(Hl[j,j], Hl[j,j-1])
-                        Hl[j,j] = r
-                        Hl[j,j-1] = 0
-                        G = Givens(j,j-1,complex(c),s')
-                        rmul!(view(Hl, ifirstm:j-1, :), G')
-                        G = Givens(j-1,j,complex(c),-s)
+                        lmul!(G, view(Hl, :, (j - 1):ilastm))
+                        c, s, r = givensAlgorithm(Hl[j, j], Hl[j, j - 1])
+                        Hl[j, j] = r
+                        Hl[j, j - 1] = 0
+                        G = Givens(j, j - 1, complex(c), s')
+                        rmul!(view(Hl, ifirstm:(j - 1), :), G')
+                        G = Givens(j - 1, j, complex(c), -s)
                     end
                     if wantZ
-                        ln = mod(l,p)+1
+                        ln = mod(l, p) + 1
                         rmul!(Z[ln], G')
                     end
                 end # l loop (350)
-                Hl = Hs[ldeflate-1]
+                Hl = Hs[ldeflate - 1]
                 rmul!(view(Hl, ifirstm:j, :), G')
             else # jdeflate in top half
                 # chase the zero up to the first position
-                for j1 in jdeflate:-1:jlo+1
+                for j1 in jdeflate:-1:(jlo + 1)
                     j = j1
-                    Hl = Hs[ldeflate-1]
-                    c,s,r = givensAlgorithm(Hl[j-1,j],Hl[j-1,j-1])
-                    Hl[j-1,j] = r
-                    Hl[j-1,j-1] = 0
-                    G = Givens(j,j-1,complex(c),conj(s))
-                    rmul!(view(Hl,ifirstm:j-2,:), G')
-                    G = Givens(j-1,j,complex(c),-s)
+                    Hl = Hs[ldeflate - 1]
+                    c, s, r = givensAlgorithm(Hl[j - 1, j], Hl[j - 1, j - 1])
+                    Hl[j - 1, j] = r
+                    Hl[j - 1, j - 1] = 0
+                    G = Givens(j, j - 1, complex(c), conj(s))
+                    rmul!(view(Hl, ifirstm:(j - 2), :), G')
+                    G = Givens(j - 1, j, complex(c), -s)
                     if wantZ
                         rmul!(Z[ldeflate], G')
                     end
-                    ln = ldeflate-1
-                    for l in 1:p-1
-                        Hln = ln == 1 ? H1 : Hs[ln-1]
+                    ln = ldeflate - 1
+                    for l in 1:(p - 1)
+                        Hln = ln == 1 ? H1 : Hs[ln - 1]
                         if ln == 1
-                            rmul!(view(Hln, ifirstm:j+1, :), G')
-                            c,s,r = givensAlgorithm(Hln[j,j-1], Hln[j+1,j-1])
-                            Hln[j,j-1] = r
-                            Hln[j+1,j-1] = 0
-                            G = Givens(j,j+1,complex(c),s)
+                            rmul!(view(Hln, ifirstm:(j + 1), :), G')
+                            c, s, r = givensAlgorithm(Hln[j, j - 1], Hln[j + 1, j - 1])
+                            Hln[j, j - 1] = r
+                            Hln[j + 1, j - 1] = 0
+                            G = Givens(j, j + 1, complex(c), s)
                             lmul!(G, view(Hln, :, j:ilastm))
                             j += 1
                         elseif !S[ln]
-                            lmul!(G, view(Hln, :, j-1:ilastm))
-                            c,s,r = givensAlgorithm(Hln[j,j], Hln[j,j-1])
-                            Hln[j,j] = r
-                            Hln[j,j-1] = 0
-                            G = Givens(j,j-1,complex(c),s')
-                            rmul!(view(Hln, ifirstm:j-1, :), G')
-                            G = Givens(j-1,j,complex(c),-s)
+                            lmul!(G, view(Hln, :, (j - 1):ilastm))
+                            c, s, r = givensAlgorithm(Hln[j, j], Hln[j, j - 1])
+                            Hln[j, j] = r
+                            Hln[j, j - 1] = 0
+                            G = Givens(j, j - 1, complex(c), s')
+                            rmul!(view(Hln, ifirstm:(j - 1), :), G')
+                            G = Givens(j - 1, j, complex(c), -s)
                         else
                             rmul!(view(Hln, ifirstm:j, :), G')
-                            c,s,r = givensAlgorithm(Hln[j-1,j-1], Hln[j,j-1])
-                            Hln[j-1,j-1] = r
-                            Hln[j,j-1] = 0
-                            G = Givens(j-1,j,complex(c),s)
+                            c, s, r = givensAlgorithm(Hln[j - 1, j - 1], Hln[j, j - 1])
+                            Hln[j - 1, j - 1] = r
+                            Hln[j, j - 1] = 0
+                            G = Givens(j - 1, j, complex(c), s)
                             lmul!(G, view(Hln, :, j:ilastm))
                         end
                         if wantZ
                             rmul!(Z[ln], G')
                         end
-                        ln = (ln == 1) ? p : (ln-1)
+                        ln = (ln == 1) ? p : (ln - 1)
                     end # l loop (360)
-                    Hl = Hs[ldeflate-1]
+                    Hl = Hs[ldeflate - 1]
                     lmul!(G, view(Hl, :, j:ilastm))
                 end # j1 loop
                 # Deflate the first element in Hessenberg
                 j = jlo
-                c,s,r = givensAlgorithm(H1[j,j], H1[j+1,j])
-                H1[j,j] = r
-                H1[j+1,j] = 0
-                G = Givens(j,j+1,complex(c),s)
-                lmul!(G, view(H1,:,j+1:ilastm))
+                c, s, r = givensAlgorithm(H1[j, j], H1[j + 1, j])
+                H1[j, j] = r
+                H1[j + 1, j] = 0
+                G = Givens(j, j + 1, complex(c), s)
+                lmul!(G, view(H1, :, (j + 1):ilastm))
                 if wantZ
                     rmul!(Z[1], G')
                 end
-                for l in p:-1:ldeflate+1
-                    Hl = Hs[l-1]
+                for l in p:-1:(ldeflate + 1)
+                    Hl = Hs[l - 1]
                     if S[l]
-                        rmul!(view(Hl,ifirstm:j+1,:), G')
-                        c,s,r = givensAlgorithm(Hl[j,j], Hl[j+1,j])
-                        Hl[j,j] = r
-                        Hl[j+1,j] = 0
-                        G = Givens(j,j+1,complex(c),s)
-                        lmul!(G, view(Hl,:, j+1:ilastm))
+                        rmul!(view(Hl, ifirstm:(j + 1), :), G')
+                        c, s, r = givensAlgorithm(Hl[j, j], Hl[j + 1, j])
+                        Hl[j, j] = r
+                        Hl[j + 1, j] = 0
+                        G = Givens(j, j + 1, complex(c), s)
+                        lmul!(G, view(Hl, :, (j + 1):ilastm))
                     else
-                        lmul!(G, view(Hl,:,j:ilastm))
-                        c,s,r = givensAlgorithm(Hl[j+1,j+1],Hl[j+1,j])
-                        Hl[j+1,j+1] = r
-                        Hl[j+1,j] = 0
-                        G = Givens(j+1,j,complex(c),conj(s))
-                        rmul!(view(Hl,ifirstm:j,:), G')
-                        G = Givens(j,j+1,complex(c),-s)
+                        lmul!(G, view(Hl, :, j:ilastm))
+                        c, s, r = givensAlgorithm(Hl[j + 1, j + 1], Hl[j + 1, j])
+                        Hl[j + 1, j + 1] = r
+                        Hl[j + 1, j] = 0
+                        G = Givens(j + 1, j, complex(c), conj(s))
+                        rmul!(view(Hl, ifirstm:j, :), G')
+                        G = Givens(j, j + 1, complex(c), -s)
                     end
                     if wantZ
                         rmul!(Z[l], G')
                     end
                 end # trailing l loop (380)
-                Hl = Hs[ldeflate-1]
-                lmul!(G, view(Hl, :, j+1:ilastm))
+                Hl = Hs[ldeflate - 1]
+                lmul!(G, view(Hl, :, (j + 1):ilastm))
             end # jdeflate top/bottom branches
             doqziter = false
         elseif split1block # (390)
             verbosity[] > 0 && println("splitting 1x1 index $ilast")
-            for l in 1:p-1
-                v4ev[l] = Hs[l][ilast,ilast]
+            for l in 1:(p - 1)
+                v4ev[l] = Hs[l][ilast, ilast]
             end
-            α[ilast], β[ilast], αscale[ilast] = _safeprod(S,H1[ilast,ilast],v4ev)
+            α[ilast], β[ilast], αscale[ilast] = _safeprod(S, H1[ilast, ilast], v4ev)
             ilast -= 1
             if ilast < 1
                 done = true
@@ -764,36 +778,37 @@ function pschur!(H1H::Th1, Hs::AbstractVector{Th},
                 # exceptional shift
                 # (from here, results must differ from Fortran version)
                 verbosity[] > 0 && println("using exceptional shift")
-                fgtmp = rand(T,2)
-                c,s,_ = givensAlgorithm(fgtmp[1], fgtmp[2])
+                fgtmp = rand(T, 2)
+                c, s, _ = givensAlgorithm(fgtmp[1], fgtmp[2])
             else
                 # normal single shift
-                c,s,_ = givensAlgorithm(one(T), one(T))
+                c, s, _ = givensAlgorithm(one(T), one(T))
                 for l in p:-1:2
-                    Hl = Hs[l-1]
+                    Hl = Hs[l - 1]
                     if S[l]
-                        c,s,_ = givensAlgorithm(Hl[ifirst,ifirst]*c,
-                                                Hl[ilast,ilast]*conj(s))
+                        c, s, _ = givensAlgorithm(Hl[ifirst, ifirst] * c,
+                                                  Hl[ilast, ilast] * conj(s))
                     else
-                        c,s,_ = givensAlgorithm(Hl[ilast,ilast]*c,
-                                                -Hl[ifirst,ifirst]*conj(s))
+                        c, s, _ = givensAlgorithm(Hl[ilast, ilast] * c,
+                                                  -Hl[ifirst, ifirst] * conj(s))
                         s = -s
                     end
                 end
-                c,s,_ = givensAlgorithm(H1[ifirst,ifirst]*c -H1[ilast,ilast]*conj(s),
-                                        H1[ifirst+1,ifirst]*c)
+                c, s, _ = givensAlgorithm(H1[ifirst, ifirst] * c -
+                                          H1[ilast, ilast] * conj(s),
+                                          H1[ifirst + 1, ifirst] * c)
                 verbosity[] > 2 && println("initial c,s: $c, $s")
             end
             # do the sweeps
-            for j1 in ifirst-1:ilast-2
-                j = j1+1
+            for j1 in (ifirst - 1):(ilast - 2)
+                j = j1 + 1
                 # Create a bulge or chase it
                 if j1 >= ifirst
-                    c,s,r = givensAlgorithm(H1[j,j-1], H1[j+1,j-1])
-                    H1[j,j-1] = r
-                    H1[j+1,j-1] = 0
+                    c, s, r = givensAlgorithm(H1[j, j - 1], H1[j + 1, j - 1])
+                    H1[j, j - 1] = r
+                    H1[j + 1, j - 1] = 0
                 end
-                G = Givens(j,j+1,complex(c),s)
+                G = Givens(j, j + 1, complex(c), s)
                 verbosity[] > 2 && println("initial G: $G")
                 lmul!(G, view(H1, :, j:ilastm))
                 if wantZ
@@ -801,29 +816,29 @@ function pschur!(H1H::Th1, Hs::AbstractVector{Th},
                 end
                 # propagate
                 for l in p:-1:2
-                    Hl = Hs[l-1]
+                    Hl = Hs[l - 1]
                     if S[l]
-                        rmul!(view(Hl, ifirstm:j+1, :), G')
-                        c,s,r = givensAlgorithm(Hl[j,j], Hl[j+1,j])
-                        Hl[j,j] = r
-                        Hl[j+1,j] = 0
-                        G = Givens(j,j+1,complex(c),s)
-                        lmul!(G, view(Hl, :, j+1:ilastm))
+                        rmul!(view(Hl, ifirstm:(j + 1), :), G')
+                        c, s, r = givensAlgorithm(Hl[j, j], Hl[j + 1, j])
+                        Hl[j, j] = r
+                        Hl[j + 1, j] = 0
+                        G = Givens(j, j + 1, complex(c), s)
+                        lmul!(G, view(Hl, :, (j + 1):ilastm))
                     else
                         lmul!(G, view(Hl, :, j:ilastm))
-                        c,s,r = givensAlgorithm(Hl[j+1,j+1], Hl[j+1,j])
-                        Hl[j+1,j+1] = r
-                        Hl[j+1,j] = 0
-                        G = Givens(j+1,j,complex(c),s')
+                        c, s, r = givensAlgorithm(Hl[j + 1, j + 1], Hl[j + 1, j])
+                        Hl[j + 1, j + 1] = r
+                        Hl[j + 1, j] = 0
+                        G = Givens(j + 1, j, complex(c), s')
                         rmul!(view(Hl, ifirstm:j, :), G')
                         s = -s
-                        G = Givens(j,j+1,complex(c),s)
+                        G = Givens(j, j + 1, complex(c), s)
                     end
                     if wantZ
                         rmul!(Z[l], G')
                     end
                 end
-                itmp = min(j+2, ilastm)
+                itmp = min(j + 2, ilastm)
                 rmul!(view(H1, ifirstm:itmp, :), G')
                 if verbosity[] > 2
                     str = (j1 >= ifirst) ? "chasing j=$j" : "creating bulge j=$j"
@@ -832,7 +847,6 @@ function pschur!(H1H::Th1, Hs::AbstractVector{Th},
             end # end of qz loop
             verbosity[] == 2 && showallmats("after qz loop")
         end # if doqziter
-
     end # iteration loop
     if !done
         throw(ErrorException("convergence failed at level $ilast"))
@@ -840,17 +854,17 @@ function pschur!(H1H::Th1, Hs::AbstractVector{Th},
 
     if wantT
         # scale factors 2:p
-        scalefacs = zeros(T,n)
+        scalefacs = zeros(T, n)
         for l in p:-1:2
-            Hl = Hs[l-1]
+            Hl = Hs[l - 1]
             if S[l]
                 for j in 1:n
-                    abst = abs(Hl[j,j])
+                    abst = abs(Hl[j, j])
                     if abst > safmin
-                        z = conj(Hl[j,j] / abst)
-                        Hl[j,j] = abst
+                        z = conj(Hl[j, j] / abst)
+                        Hl[j, j] = abst
                         if j < n
-                            Hl[j,j+1:n] .*= z
+                            Hl[j, (j + 1):n] .*= z
                         end
                     else
                         z = one(T)
@@ -859,11 +873,11 @@ function pschur!(H1H::Th1, Hs::AbstractVector{Th},
                 end
             else
                 for j in 1:n
-                    abst = abs(Hl[j,j])
+                    abst = abs(Hl[j, j])
                     if abst > safmin
-                        z = conj(Hl[j,j] / abst)
-                        Hl[j,j] = abst
-                        Hl[1:j-1,j] .*= z
+                        z = conj(Hl[j, j] / abst)
+                        Hl[j, j] = abst
+                        Hl[1:(j - 1), j] .*= z
                     else
                         z = one(T)
                     end
@@ -872,21 +886,20 @@ function pschur!(H1H::Th1, Hs::AbstractVector{Th},
             end
             if wantZ
                 for j in 1:n
-                    Z[l][:,j] .*= conj(scalefacs[j])
+                    Z[l][:, j] .*= conj(scalefacs[j])
                 end
             end
-            Hlm1 = l==2 ? H1 : Hs[l-2]
-            if S[l-1]
+            Hlm1 = l == 2 ? H1 : Hs[l - 2]
+            if S[l - 1]
                 for j in 1:n
-                    Hlm1[1:j,j] .*= conj(scalefacs[j])
+                    Hlm1[1:j, j] .*= conj(scalefacs[j])
                 end
             else
                 for j in 1:n
-                    Hlm1[j,j:n] .*= scalefacs[j]
+                    Hlm1[j, j:n] .*= scalefacs[j]
                 end
             end
         end
-
     end
 
     if rev
@@ -894,21 +907,21 @@ function pschur!(H1H::Th1, Hs::AbstractVector{Th},
             Zr = similar(Z)
             Zr[1] = Z[1]
             for l in 2:p
-                Zr[l] = Z[p+2-l]
+                Zr[l] = Z[p + 2 - l]
             end
         else
             Zr = Z
         end
         Hr = similar(Hs)
-        for l in 1:p-1
-            Hr[l] = Hs[p-l]
+        for l in 1:(p - 1)
+            Hr[l] = Hs[p - l]
         end
         #        return GeneralizedPeriodicSchur(reverse(S),p,H1,Hr,Zr,α,β,αscale,'L')
         # somehow this seems to circumvent a type-intersection bug in the compiler:
-        f() = GeneralizedPeriodicSchur(reverse(S),p,H1,Hr,Zr,α,β,αscale,'L')
+        f() = GeneralizedPeriodicSchur(reverse(S), p, H1, Hr, Zr, α, β, αscale, 'L')
         return f()
     else
-        return GeneralizedPeriodicSchur(S,1,H1,Hs,Z,α,β,αscale)
+        return GeneralizedPeriodicSchur(S, 1, H1, Hs, Z, α, β, αscale)
     end
 end
 
@@ -918,7 +931,7 @@ _safeprod(s,x0,x) -> alpha,beta,scale::Int
 represent `x0^s[1] * cumprod(x.^s[2:end])` as `α / β * 2^scale` where
 `α = 0` or `abs(α) ∈ [1,2)`, `β ∈ {0,1}`, avoiding overflow/underflow.
 """
-function _safeprod(s::AbstractVector{Bool},x0::T,v::Vector{T}) where T
+function _safeprod(s::AbstractVector{Bool}, x0::T, v::Vector{T}) where {T}
     # WARNING: assumes base 2, like IEEE
     RT = real(T)
     base = RT(2)
@@ -927,7 +940,7 @@ function _safeprod(s::AbstractVector{Bool},x0::T,v::Vector{T}) where T
     β = 1
     scale = 0
     for i in 1:p
-        xi = i == 1 ? x0 : v[i-1]
+        xi = i == 1 ? x0 : v[i - 1]
         if s[i]
             α *= xi
         else
@@ -941,7 +954,7 @@ function _safeprod(s::AbstractVector{Bool},x0::T,v::Vector{T}) where T
             α = zero(T)
             scale = 0
             if β == 0
-                return α,β,scale
+                return α, β, scale
             end
         else
             while abs(α) < one(real(T))
@@ -954,7 +967,7 @@ function _safeprod(s::AbstractVector{Bool},x0::T,v::Vector{T}) where T
             end
         end
     end
-    return α,β,scale
+    return α, β, scale
 end
 
 # Generalized Periodic Hessenberg reduction.
@@ -968,8 +981,7 @@ using MatrixFactorizations: rq!
 # there are extra transformations and we want full Q here anyway.
 # Based on Kressner's 2001 paper
 function _phessenberg!(A::AbstractVector{TA}, S::AbstractVector{Bool};
-                       wantQ = true
-                       ) where {TA<:AbstractMatrix{T}} where {T<:BlasFloat}
+                       wantQ = true) where {TA <: AbstractMatrix{T}} where {T <: BlasFloat}
     S[1] || throw(ArgumentError("The first entry in S must be true"))
     p = length(A)
     n = checksquare(A[1])
@@ -981,46 +993,46 @@ function _phessenberg!(A::AbstractVector{TA}, S::AbstractVector{Bool};
         end
     end
     if wantQ
-        Qs = [Matrix{T}(I,n,n) for l in 1:p]
+        Qs = [Matrix{T}(I, n, n) for l in 1:p]
     else
         Qs = nothing
     end
 
     # Stage 1. Triangular decompositions
-    τ = zeros(T,n)
+    τ = zeros(T, n)
     tC = (T <: Complex) ? 'C' : 'T'
     for l in p:-1:2
         if S[l]
-            qrA, τl = geqrf!(A[l],τ)
-            if S[l-1]
-                ormqr!('R','N', qrA, τl, A[l-1])
+            qrA, τl = geqrf!(A[l], τ)
+            if S[l - 1]
+                ormqr!('R', 'N', qrA, τl, A[l - 1])
             else
-                ormqr!('L',tC, qrA, τl, A[l-1])
+                ormqr!('L', tC, qrA, τl, A[l - 1])
             end
-            wantQ && ormqr!('R','N', qrA, τl, Qs[l])
+            wantQ && ormqr!('R', 'N', qrA, τl, Qs[l])
         else
-            rqA,τl = gerqf!(A[l],τ)
-            if S[l-1]
-                ormrq!('R', tC, rqA, τl, A[l-1])
+            rqA, τl = gerqf!(A[l], τ)
+            if S[l - 1]
+                ormrq!('R', tC, rqA, τl, A[l - 1])
             else
-                ormrq!('L', 'N', rqA, τl, A[l-1])
+                ormrq!('L', 'N', rqA, τl, A[l - 1])
             end
-            wantQ && ormrq!('R',tC, rqA, τl, Qs[l])
+            wantQ && ormrq!('R', tC, rqA, τl, Qs[l])
         end
         triu!(A[l])
     end
     # Stage 2. Hessenberg reduction of A₁
     # Following Bojanczyk et al., we use Givens here to facilitate re-triangularization
     # in the !S[l] case.
-    Gtmp = Vector{Givens{T}}(undef,n)
+    Gtmp = Vector{Givens{T}}(undef, n)
     A1 = A[1]
-    for j in 1:n-2
-        for i in n:-1:j+2
-            c,s,r = givensAlgorithm(A1[i-1,j], A1[i,j])
-            A1[i-1,j] = r
-            A1[i,j] = 0
-            G = Givens(i-1,i,T(c),s)
-            lmul!(G, view(A1, :, j+1:n))
+    for j in 1:(n - 2)
+        for i in n:-1:(j + 2)
+            c, s, r = givensAlgorithm(A1[i - 1, j], A1[i, j])
+            A1[i - 1, j] = r
+            A1[i, j] = 0
+            G = Givens(i - 1, i, T(c), s)
+            lmul!(G, view(A1, :, (j + 1):n))
             wantQ && rmul!(Qs[1], G')
             Gtmp[i] = G
         end
@@ -1028,46 +1040,45 @@ function _phessenberg!(A::AbstractVector{TA}, S::AbstractVector{Bool};
         for l in p:-1:2
             Al = A[l]
             if S[l]
-                for i in n:-1:j+2
+                for i in n:-1:(j + 2)
                     G = Gtmp[i]
                     rmul!(view(Al, 1:i, :), G')
-                    c,s,r = givensAlgorithm(Al[i-1,i-1], Al[i,i-1])
-                    Al[i-1,i-1] = r
-                    Al[i,i-1] = 0
-                    G = Givens(i-1,i,T(c),s)
+                    c, s, r = givensAlgorithm(Al[i - 1, i - 1], Al[i, i - 1])
+                    Al[i - 1, i - 1] = r
+                    Al[i, i - 1] = 0
+                    G = Givens(i - 1, i, T(c), s)
                     lmul!(G, view(Al, :, i:n))
                     Gtmp[i] = G
                 end
             else
-                for i in n:-1:j+2
+                for i in n:-1:(j + 2)
                     G = Gtmp[i]
-                    lmul!(G, view(Al, :, i-1:n))
-                    c,s,r = givensAlgorithm(Al[i,i], Al[i,i-1])
-                    Al[i,i] = r
-                    Al[i,i-1] = 0
-                    G = Givens(i,i-1,T(c),s')
-                    rmul!(view(Al, 1:i-1, :), G')
-                    Gtmp[i] = Givens(i-1,i,T(c),-s)
+                    lmul!(G, view(Al, :, (i - 1):n))
+                    c, s, r = givensAlgorithm(Al[i, i], Al[i, i - 1])
+                    Al[i, i] = r
+                    Al[i, i - 1] = 0
+                    G = Givens(i, i - 1, T(c), s')
+                    rmul!(view(Al, 1:(i - 1), :), G')
+                    Gtmp[i] = Givens(i - 1, i, T(c), -s)
                 end
             end
             if wantQ
-                for i in n:-1:j+2
+                for i in n:-1:(j + 2)
                     rmul!(Qs[l], Gtmp[i]')
                 end
             end
         end
-        for i in n:-1:j+2
+        for i in n:-1:(j + 2)
             rmul!(A1, Gtmp[i]') # view(A1, 1:n, :) is all of A1
         end
     end
     # claim the above already cleared out the detritus, so no triu! calls.
-    return A,Qs
+    return A, Qs
 end
 
 # generic version
 function _phessenberg!(A::AbstractVector{TA}, S::AbstractVector{Bool};
-                       wantQ = true
-                       ) where {TA<:AbstractMatrix{T}} where {T}
+                       wantQ = true) where {TA <: AbstractMatrix{T}} where {T}
     S[1] || throw(ArgumentError("The first entry in S must be true"))
     p = length(A)
     n = checksquare(A[1])
@@ -1079,7 +1090,7 @@ function _phessenberg!(A::AbstractVector{TA}, S::AbstractVector{Bool};
         end
     end
     if wantQ
-        Qs = [Matrix{T}(I,n,n) for l in 1:p]
+        Qs = [Matrix{T}(I, n, n) for l in 1:p]
     else
         Qs = nothing
     end
@@ -1088,18 +1099,18 @@ function _phessenberg!(A::AbstractVector{TA}, S::AbstractVector{Bool};
     for l in p:-1:2
         if S[l]
             F = qr!(A[l])
-            if S[l-1]
-                rmul!(A[l-1], F.Q)
+            if S[l - 1]
+                rmul!(A[l - 1], F.Q)
             else
-                lmul!(F.Q', A[l-1])
+                lmul!(F.Q', A[l - 1])
             end
             wantQ && rmul!(Qs[l], F.Q)
         else
             F = rq!(A[l])
-            if S[l-1]
-                rmul!(A[l-1], F.Q')
+            if S[l - 1]
+                rmul!(A[l - 1], F.Q')
             else
-                lmul!(F.Q, A[l-1])
+                lmul!(F.Q, A[l - 1])
             end
             wantQ && rmul!(Qs[l], F.Q')
         end
@@ -1110,15 +1121,15 @@ function _phessenberg!(A::AbstractVector{TA}, S::AbstractVector{Bool};
     # Stage 2. Hessenberg reduction of A₁
     # Following Bojanczyk et al., we use Givens here to facilitate re-triangularization
     # in the !S[l] case.
-    Gtmp = Vector{Givens{T}}(undef,n)
+    Gtmp = Vector{Givens{T}}(undef, n)
     A1 = A[1]
-    for j in 1:n-2
-        for i in n:-1:j+2
-            c,s,r = givensAlgorithm(A1[i-1,j], A1[i,j])
-            A1[i-1,j] = r
-            A1[i,j] = 0
-            G = Givens(i-1,i,T(c),s)
-            lmul!(G, view(A1, :, j+1:n))
+    for j in 1:(n - 2)
+        for i in n:-1:(j + 2)
+            c, s, r = givensAlgorithm(A1[i - 1, j], A1[i, j])
+            A1[i - 1, j] = r
+            A1[i, j] = 0
+            G = Givens(i - 1, i, T(c), s)
+            lmul!(G, view(A1, :, (j + 1):n))
             wantQ && rmul!(Qs[1], G')
             Gtmp[i] = G
         end
@@ -1126,40 +1137,40 @@ function _phessenberg!(A::AbstractVector{TA}, S::AbstractVector{Bool};
         for l in p:-1:2
             Al = A[l]
             if S[l]
-                for i in n:-1:j+2
+                for i in n:-1:(j + 2)
                     G = Gtmp[i]
                     rmul!(view(Al, 1:i, :), G')
-                    c,s,r = givensAlgorithm(Al[i-1,i-1], Al[i,i-1])
-                    Al[i-1,i-1] = r
-                    Al[i,i-1] = 0
-                    G = Givens(i-1,i,T(c),s)
+                    c, s, r = givensAlgorithm(Al[i - 1, i - 1], Al[i, i - 1])
+                    Al[i - 1, i - 1] = r
+                    Al[i, i - 1] = 0
+                    G = Givens(i - 1, i, T(c), s)
                     lmul!(G, view(Al, :, i:n))
                     Gtmp[i] = G
                 end
             else
-                for i in n:-1:j+2
+                for i in n:-1:(j + 2)
                     G = Gtmp[i]
-                    lmul!(G, view(Al, :, i-1:n))
-                    c,s,r = givensAlgorithm(Al[i,i], Al[i,i-1])
-                    Al[i,i] = r
-                    Al[i,i-1] = 0
-                    G = Givens(i,i-1,T(c),s')
-                    rmul!(view(Al, 1:i-1, :), G')
-                    Gtmp[i] = Givens(i-1,i,T(c),-s)
+                    lmul!(G, view(Al, :, (i - 1):n))
+                    c, s, r = givensAlgorithm(Al[i, i], Al[i, i - 1])
+                    Al[i, i] = r
+                    Al[i, i - 1] = 0
+                    G = Givens(i, i - 1, T(c), s')
+                    rmul!(view(Al, 1:(i - 1), :), G')
+                    Gtmp[i] = Givens(i - 1, i, T(c), -s)
                 end
             end
             if wantQ
-                for i in n:-1:j+2
+                for i in n:-1:(j + 2)
                     rmul!(Qs[l], Gtmp[i]')
                 end
             end
         end
-        for i in n:-1:j+2
+        for i in n:-1:(j + 2)
             rmul!(A1, Gtmp[i]') # view(A1, 1:n, :) is all of A1
         end
     end
     # claim the above already cleared out the detritus, so no triu! calls.
-    return A,Qs
+    return A, Qs
 end
 
 """
@@ -1172,28 +1183,27 @@ of paired series of matrices in left operator order `[A₁,...,Aₚ]`,`[B₁,...
 Terms in the decomposition are actually shifted by one; this does not change the
 eigenvalues but requires attention when dealing with invariant subspaces.
 """
-function gpschur(As::AbstractVector{MT},Bs::AbstractVector{MT}; kwargs...
-                 ) where {MT<:AbstractMatrix{T}} where {T}
+function gpschur(As::AbstractVector{MT}, Bs::AbstractVector{MT};
+                 kwargs...) where {MT <: AbstractMatrix{T}} where {T}
     Cs, Ss = _mkpsargs(As, Bs)
     pschur!(Cs, Ss; kwargs...)
 end
 
 # construct argument `Cs,S` to pschur!
-function _mkpsargs(As::Vector{MT},Bs) where {MT<:AbstractMatrix{T}} where {T}
+function _mkpsargs(As::Vector{MT}, Bs) where {MT <: AbstractMatrix{T}} where {T}
     ph = length(As)
-    ib = (ph==1) ? 1 : (ph-1)
+    ib = (ph == 1) ? 1 : (ph - 1)
     Cs = [copy(As[ph]) .+ 0im, copy(Bs[ib]) .+ 0im]
-    Ss = [true,false]
-    for j in ph-1:-1:1
-        push!(Cs,copy(As[j]) .+ 0im)
-        jx = (j == 1) ? ph : (j-1)
-        push!(Cs,copy(Bs[jx]) .+ 0im)
-        push!(Ss,true)
-        push!(Ss,false)
+    Ss = [true, false]
+    for j in (ph - 1):-1:1
+        push!(Cs, copy(As[j]) .+ 0im)
+        jx = (j == 1) ? ph : (j - 1)
+        push!(Cs, copy(Bs[jx]) .+ 0im)
+        push!(Ss, true)
+        push!(Ss, false)
     end
-    return Cs,Ss
+    return Cs, Ss
 end
-
 
 """
     checkpsd(P::AbstractPeriodicSchur{T}, As::Vector{Matrix{T}})
@@ -1203,11 +1213,11 @@ Returns a status code (Bool) and a vector of
 normalized factorization errors (which should be O(1)).
 """
 function checkpsd(P::AbstractPeriodicSchur{T}, Hs::AbstractVector;
-                  quiet=false, thresh=100, strict=false) where T
+                  quiet = false, thresh = 100, strict = false) where {T}
     # Hs could be structured matrices of different varieties, caveat emptor.
     p = length(Hs)
-    n = size(P.T1,1)
-    S = isa(P,GeneralizedPeriodicSchur) ? P.S : trues(p)
+    n = size(P.T1, 1)
+    S = isa(P, GeneralizedPeriodicSchur) ? P.S : trues(p)
     if P.period != p
         throw(DimensionMismatch("length of Hs vector must match period of P"))
     end
@@ -1233,16 +1243,16 @@ function checkpsd(P::AbstractPeriodicSchur{T}, Hs::AbstractVector;
         end
     end
     for l in 1:p
-        l1 = mod(l,p)+1
+        l1 = mod(l, p) + 1
         Tl = Ts[l]
-        cmp = strict ? 0 : ttol * eps(real(T))*n
-        if norm(tril(Tl,-1)) > cmp
+        cmp = strict ? 0 : ttol * eps(real(T)) * n
+        if norm(tril(Tl, -1)) > cmp
             if !quiet
                 @warn "triangularity fails for l=$l"
             end
             result = false
         end
-        if norm(P.Z[l]*P.Z[l]'-I) > qtol * eps(real(T))*n
+        if norm(P.Z[l] * P.Z[l]' - I) > qtol * eps(real(T)) * n
             if !quiet
                 @warn "orthogonality fails for l=$l"
             end
