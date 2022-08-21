@@ -79,7 +79,8 @@ Currently reordering is only implemented for standard, not generalized, decompos
 
 ## Large problems: periodic Krylov-Schur
 
-If only a few eigenvalues (and corresponding Schur vectors) are needed, it may be
+If only a few exterior eigenvalues (and corresponding Schur vectors) of a standard
+periodic system are needed, it may be
 more efficient to use the Krylov-Schur algorithm implemented as
 
 ```julia
