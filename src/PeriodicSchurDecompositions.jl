@@ -6,7 +6,9 @@ const verbosity = Ref(0)
 setverbosity(j) = verbosity[] = j
 
 # SLICOT has some peculiar computations for shifts; alternative is from LAPACK
-const slicot_shifts = Ref(true)
+const slicot_shifts = Ref(false)
+# SLICOT's convergence criterion is often too lax; alternative is from LAPACK
+const slicot_convg = Ref(false)
 
 import LinearAlgebra: lmul!, rmul!
 using LinearAlgebra: checksquare, require_one_based_indexing
@@ -412,6 +414,11 @@ function pschur!(H1H::S1,
     i = n
     local splitting # flag for control flow
     local tst1
+    if verbosity[] > 0
+        print("Real periodic QR p=$p n=$n, ")
+        println((slicot_shifts[] ? "slicot" : "lapack")," shifts, ",
+                (slicot_convg[] ? "slicot" : "lapack"), " convg")
+    end
     while i >= 1
         verbosity[] > 0 && println("starting block i=$i")
         # eigvals i+1:n have converged
@@ -423,9 +430,9 @@ function pschur!(H1H::S1,
         # off at the bottom
 
         # Let 𝕋 = H₂*H₃*...*Hₚ and ℍ = H₁ * T
-        its = 0
+        its = 1
         while its < maxitleft
-            verbosity[] > 0 && println("QR iteration l=$l i=$i")
+            verbosity[] > 0 && println("QR iteration l=$l i=$i, iter $its")
             splitting = false
             # initialization: compute ℍ[i,i] (and ℍ[i,i-1] if i > l)
             hp22 = one(T)
@@ -484,18 +491,30 @@ function pschur!(H1H::S1,
                 hsupdiag[n - i + k - 1] = hh12
 
                 # test for negligible subdiagonal
-                xmin = min(xmin, abs(hh21))
+                if abs(hh21) < abs(xmin)
+                    xmin = hh21
+                end
+
                 tst1 = abs(hh11) + abs(hh22)
                 if tst1 == 0
                     tst1 = opnorm(view(H1, l:i, l:i), 1)
                 end
 
-                # SLICOT has
-                # found = abs(hh21) <= max(ulp*tst1, smlnum)
+                if slicot_convg[]
+                    found = abs(hh21) <= max(ulp*tst1, smlnum)
+                    # CHECKME:
+                    # this is not in SLICOT MB03WD
+                    # logic below handles double deflation, but one can't get there
+                    # without something like this
+                    if found && (k > l + 1) && (abs(hh10) <= max(ulp*tst1, smlnum))
+                        klast -= 1
+                    end
+                else
 
-                # LAPACK has smlnum on the right, but that leads to pointless iterations
+                # LAPACK has smlnum on the right, but that may lead to pointless iterations
                 # for tiny eigvals
-                if abs(hh21) <= max(ulp^2 * tst1, smlnum)
+                # if abs(hh21) <= max(ulp^2 * tst1, smlnum)
+                if abs(hh21) <= smlnum
                     found = true
                 elseif abs(hh21) <= ulp * tst1
                     # The following is from LAPACK (less prone to spurious convergence)
@@ -508,11 +527,12 @@ function pschur!(H1H::S1,
                     if !found && verbosity[] > 1
                         t1 = ba * (ab / stmp)
                         t2 = ulp * (bb * (aa / stmp))
-                        println("missed AT criterion hh21=$hh21 vs $tst1; $t1 vs. $t2")
+                        println("missed AT criterion hh21=$hh21 vs $(ulp*tst1); $t1 vs. $t2")
                     end
                 end
+                end
                 if found
-                    verbosity[] > 1 && println("k=$k hh21=$hh21")
+                    verbosity[] > 1 && println("k=$k hh21=$hh21 hh10=$hh10")
                     break
                 end
                 # update for next cycle
@@ -539,6 +559,7 @@ function pschur!(H1H::S1,
                         tst1 = opnorm(view(H1, l:i, l:i), 1)
                     end
                     if abs(H1[l, l - 1]) > max(ulp * tst1, smlnum)
+                        verbosity[] > 1 && println("processing subdiag $l: $(H1[l, l - 1])")
                         for k in i:-1:l
                             for j in 1:(p - 1)
                                 if j == 1
@@ -591,21 +612,27 @@ function pschur!(H1H::S1,
                 i1 = l
                 i2 = i
             end
+            exc_shift = false
             if its == 10
                 # exceptional shift
+                exc_shift = true
                 s = abs(hsubdiag[l + 1]) + abs(hsubdiag[l + 2])
                 h44 = dat1 * s + hdiag[l]
                 h33 = h44
                 h43h34 = dat2 * s * s
                 h43 = s
                 h34 = dat2 * s
-            elseif its == 20
+                verbosity[] > 0 && println("exceptional shift $h33 $h44 $h43h34")
+            elseif its % 10 == 0
+                # another exceptional shift, from LAPACK
+                exc_shift = true
                 s = abs(hsubdiag[i]) + abs(hsubdiag[i - 1])
                 h44 = dat1 * s + hdiag[i]
                 h33 = h44
                 h43h34 = dat2 * s * s
                 h43 = s
                 h34 = dat2 * s
+                verbosity[] > 0 && println("exceptional shift $h33 $h44 $h43h34")
             else
                 # prepare for Francis' double shift
                 # i.e., second degree generalized Rayleigh quotient
@@ -614,56 +641,60 @@ function pschur!(H1H::S1,
                 h43h34 = hsubdiag[i] * hsupdiag[n - 1]
                 h43 = hsubdiag[i]
                 h34 = hsupdiag[n - 1]
-            end
 
-            if slicot_shifts[]
-                # MB03WD has the next block inside the last else block, which is bizarre
-                disc = (h33 - h44) * T(0.5)
-                disc = disc * disc + h43h34
-                if disc > 0
-                    # real roots: use Wilkinson's shift
-                    rtdisc = sqrt(disc)
-                    ave = (h33 + h44) * T(0.5)
-                    if abs(h33) - abs(h44) > 0
-                        h33 = h33 * h44 - h43h34
-                        h44 = h33 / ((ave >= 0 ? rtdisc : -rtdisc) + ave)
+                if slicot_shifts[]
+                    disc = (h33 - h44) * T(0.5)
+                    disc = disc * disc + h43h34
+                    if disc > 0
+                        # real roots: use Wilkinson's shift
+                        rtdisc = sqrt(disc)
+                        ave = (h33 + h44) * T(0.5)
+                        if abs(h33) - abs(h44) > 0
+                            h33 = h33 * h44 - h43h34
+                            h44 = h33 / ((ave >= 0 ? rtdisc : -rtdisc) + ave)
+                        else
+                            h44 = (ave >= 0 ? rtdisc : -rtdisc) + ave
+                        end
+                        # use one value twice
+                        h33 = h44
+                        h43h34 = zero(T)
+                        verbosity[] > 0 && println("slicot shift double $h33")
                     else
-                        h44 = (ave >= 0 ? rtdisc : -rtdisc) + ave
+                        verbosity[] > 0 && println("slicot shift $h33 $h44 $h43h34")
                     end
-                    # use one value twice
-                    h33 = h44
-                    h43h34 = zero(T)
-                end
-                # end # from disputed SLICOT logic
-            else
-                # the following is taken from LAPACK dlahqr
-                s = abs(h33) + abs(h34) + abs(h43) + abs(h44)
-                if s == 0
-                    rt1r = zero(T)
-                    rt2r = zero(T)
-                    rt1i = zero(T)
-                    rt2i = zero(T)
                 else
-                    h33 /= s
-                    h44 /= s
-                    h34 /= s
-                    h43 /= s
-                    trc = (h33 + h44) * T(0.5)
-                    disc = (h33 - trc) * (h44 - trc) - h34 * h43
-                    rtdisc = sqrt(abs(disc))
-                    if disc >= 0
-                        rt1r = trc * s
-                        rt2r = rt1r
-                        rt1i = rtdisc * s
-                        rt2i = -rt1i
-                        verbosity[] > 1 && println("shifts $rt1r ± $rt1i im")
+                    # the following is taken from LAPACK dlahqr
+                    s = abs(h33) + abs(h34) + abs(h43) + abs(h44)
+                    if s == 0
+                        rt1r = zero(T)
+                        rt2r = zero(T)
+                        rt1i = zero(T)
+                        rt2i = zero(T)
+                        verbosity[] > 0 && println("zero shift")
                     else
-                        rt1r = trc + rtdisc
-                        rt2r = trc - rtdisc
-                        rt1r = (abs(rt1r - h44) <= abs(rt2r - h44)) ? rt1r : rt2r
-                        rt2r = rt1r
-                        rt1i = rt2i = zero(T)
-                        verbosity[] > 1 && println("shift $rt1r")
+                        verbosity[] > 1 && println("computing shift from $h33 $h44 $h43h34")
+                        h33 /= s
+                        h44 /= s
+                        h34 /= s
+                        h43 /= s
+                        trc = (h33 + h44) * T(0.5)
+                        disc = (h33 - trc) * (h44 - trc) - h34 * h43
+                        rtdisc = sqrt(abs(disc))
+                        verbosity[] > 1 && println("trc=$trc disc=$disc")
+                        if disc >= 0
+                            rt1r = trc * s
+                            rt2r = rt1r
+                            rt1i = rtdisc * s
+                            rt2i = -rt1i
+                            verbosity[] > 0 && println("shifts $rt1r ± $rt1i im")
+                        else
+                            rt1r = trc + rtdisc
+                            rt2r = trc - rtdisc
+                            rt1r = (abs(rt1r - h44) <= abs(rt2r - h44)) ? (rt1r*s) : (rt2r*s)
+                            rt2r = rt1r
+                            rt1i = rt2i = zero(T)
+                            verbosity[] > 0 && println("shift $rt1r (double)")
+                        end
                     end
                 end
             end
@@ -678,7 +709,7 @@ function pschur!(H1H::S1,
                 h12 = hsupdiag[n - i + m]
                 h21 = hsubdiag[m + 1]
                 h22 = hdiag[m + 1]
-                if slicot_shifts[]
+                if slicot_shifts[] || exc_shift
                     h44s = h44 - h11
                     h33s = h33 - h11
                     v1 = (h33s * h44s - h43h34) / h21 + h12
@@ -699,6 +730,7 @@ function pschur!(H1H::S1,
                 if m > l
                     tst1 = abs(v1) * (abs(hdiag[m - 1]) + abs(h11) + abs(h22))
                     if abs(hsubdiag[m]) * (abs(v2) + abs(v3)) <= ulp * tst1
+                        verbosity[] > 1 && println("early QR start m=$m")
                         break
                     end
                 end
@@ -718,15 +750,18 @@ function pschur!(H1H::S1,
                     # otherwise use v from above
                 end
                 ξ = view(v, 1:nr)
-                t = _reflector!(ξ)
-                hr = Householder{T, typeof(ξ)}(view(ξ, 2:nr), t)
+                τ1 = _reflector!(ξ)
+                hr = Householder{T, typeof(ξ)}(view(ξ, 2:nr), τ1)
                 if k > mlast
-                    H1[k, k - 1] = v[1] # CHECKME: did reflector! update this like dlarfg?
+                    H1[k, k - 1] = v[1]
                     H1[k + 1, k - 1] = zero(T)
                     if k < i - 1
                         H1[k + 2, k - 1] = zero(T)
                     end
                 elseif mlast > l
+                    # Note: LAPACK uses τ1 to protect against underflow here and below,
+                    # but I don't do that here (yet) pending study
+                    # (some Julia reflectors have a different convention for τ).
                     H1[k, k - 1] = -H1[k, k - 1]
                 end
 
