@@ -1,10 +1,7 @@
 module PeriodicSchurDecompositions
 using LinearAlgebra
 
-# verbosity values: 0 - silent, 1 - steps, 2 - convergence info, 3 - various matrices
-const verbosity = Ref(0)
-setverbosity(j) = verbosity[] = j
-
+# Some algorithms are configurable until tests are more comprehensive.
 # SLICOT has some peculiar computations for shifts; alternative is from LAPACK
 const slicot_shifts = Ref(false)
 # SLICOT's convergence criterion is often too lax; alternative is from LAPACK
@@ -15,6 +12,9 @@ using LinearAlgebra: checksquare, require_one_based_indexing
 using LinearAlgebra: Givens, givensAlgorithm
 
 export pschur, pschur!, phessenberg!, gpschur, PeriodicSchur, GeneralizedPeriodicSchur
+
+# Do this early in case we want to use any bits in constructors etc.
+include("diagnostics.jl")
 
 """
     IllConditionedException <: Exception
@@ -153,6 +153,7 @@ function pschur!(A::AbstractVector{S},
                 maxitfac = maxitfac)
 end
 
+# orientation
 function char_lr(lr::Symbol)
     if lr === :R
         return 'R'
@@ -273,7 +274,7 @@ else
     end
 end
 
-# mainly translated from SLICOT routine MB03WD, by V.Sima following A.Varga
+# Mainly translated from SLICOT routine MB03WD, by V.Sima following A.Varga
 # SLICOT Copyright (c) 2002-2020 NICONET e.V.
 # SLICOT (following LAPACK) allows limiting QR to a lower portion of the system.
 # This is dangerous for some matrices, so it is suppressed by default.
@@ -356,6 +357,7 @@ function pschur!(H1H::S1,
         end
     end
 
+    # The aliases aim for consistency w/ SLICOT but seem more understandable.
     hdiag = wr
     hsubdiag = wi
     hsupdiag = zeros(T, n)
@@ -379,10 +381,14 @@ function pschur!(H1H::S1,
         end
     end
     @_dbg_rpschur saveA1()
-    function checkfac1(str)
+    function checkfac1(str,detail=false)
         if wantZ
             A1tmp = Z[1] * H1 * Z[2]'
             println(str, " H1 factor error: ", norm(A1tmp - A1init))
+            if detail
+                @show A1init
+                @show  A1tmp
+            end
         end
     end
 
@@ -515,25 +521,25 @@ function pschur!(H1H::S1,
                     end
                 else
 
-                # LAPACK has smlnum on the right, but that may lead to pointless iterations
-                # for tiny eigvals
-                # if abs(hh21) <= max(ulp^2 * tst1, smlnum)
-                if abs(hh21) <= smlnum
-                    found = true
-                elseif abs(hh21) <= ulp * tst1
-                    # The following is from LAPACK (less prone to spurious convergence)
-                    ab = max(abs(hh21), abs(hh12))
-                    ba = min(abs(hh21), abs(hh12))
-                    aa = max(abs(hh22), abs(hh11 - hh22))
-                    bb = min(abs(hh22), abs(hh11 - hh22))
-                    stmp = aa + ab
-                    found = ba * (ab / stmp) <= max(smlnum, ulp * (bb * (aa / stmp)))
-                    if !found && verbosity[] > 1
-                        t1 = ba * (ab / stmp)
-                        t2 = ulp * (bb * (aa / stmp))
-                        println("missed AT criterion hh21=$hh21 vs $(ulp*tst1); $t1 vs. $t2")
+                    # LAPACK has smlnum on the right, but that may lead to pointless
+                    # iterations for tiny eigvals. We 
+                    # if abs(hh21) <= max(ulp^2 * tst1, smlnum)
+                    if abs(hh21) <= smlnum
+                        found = true
+                    elseif abs(hh21) <= ulp * tst1
+                        # The following is from LAPACK (less prone to spurious convergence)
+                        ab = max(abs(hh21), abs(hh12))
+                        ba = min(abs(hh21), abs(hh12))
+                        aa = max(abs(hh22), abs(hh11 - hh22))
+                        bb = min(abs(hh22), abs(hh11 - hh22))
+                        stmp = aa + ab
+                        found = ba * (ab / stmp) <= max(smlnum, ulp * (bb * (aa / stmp)))
+                        if !found && verbosity[] > 1
+                            t1 = ba * (ab / stmp)
+                            t2 = ulp * (bb * (aa / stmp))
+                            println("missed AT criterion hh21=$hh21 vs $(ulp*tst1); $t1 vs. $t2")
+                        end
                     end
-                end
                 end
                 if found
                     verbosity[] > 1 && println("k=$k hh21=$hh21 hh10=$hh10")
@@ -972,7 +978,7 @@ function pschur!(H1H::S1,
         maxitleft -= its
         i = l - 1
     end # while, main loop
-    @_dbg_rpschur checkfac1("after main loop")
+    @_dbg_rpschur checkfac1("after main loop",true)
     # next block is not in MB02WD, but needed to clear out dust.
     # I probably applied a reflector or rotation to an extra row somewhere
     # giving roundoff instead of 0

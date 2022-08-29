@@ -22,15 +22,6 @@ struct PKSFailure <: Exception
     msg::String
 end
 
-const _kry_verby = Ref(0) # short for verbosity
-const _kry_styled = Ref(true)
-_printsty(c, xs...) =
-    if _kry_styled[]
-        printstyled(xs...; color = c)
-    else
-        print(xs...)
-    end
-
 """
 Structure holding a periodic Krylov decomposition (D.Kressner, Numer. Math. 2006).
 
