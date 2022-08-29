@@ -261,6 +261,14 @@ _gethess!(A::StridedMatrix) = triu!(A, -1)
 # This depends on LinearAlgebra internals
 _gethess!(A::UpperHessenberg) = triu!(A.data, -1)
 
+if isfile(joinpath(@__DIR__, "debugging.jl"))
+    include("debugging.jl")
+else
+    macro _dbg_rpschur(expr)
+        nothing
+    end
+end
+
 # mainly translated from SLICOT routine MB03WD, by V.Sima following A.Varga
 # SLICOT Copyright (c) 2002-2020 NICONET e.V.
 """
@@ -355,6 +363,23 @@ function pschur!(H1H::S1,
         end
         nothing
     end
+
+    local A1init
+    function saveA1()
+        if wantZ
+            A1init = Z[1] * H1 * Z[2]'
+        else
+            _printsty(:cyan, "no H1 check w/o Z")
+        end
+    end
+    @_dbg_rpschur saveA1()
+    function checkfac1(str)
+        if wantZ
+            A1tmp = Z[1] * H1 * Z[2]'
+            println(str, " H1 factor error: ", norm(A1tmp - A1init))
+        end
+    end
+
     function showprod(str)
         if verbosity[] > 2 && p > 1
             Htmp = copy(H1)
@@ -543,6 +568,7 @@ function pschur!(H1H::S1,
                         Hp[l, l - 1] = zero(T)
                     end # if subdiagonals were annihilated
                     H1[l, l - 1] = zero(T)
+                    @_dbg_rpschur checkfac1("after subdiag $l")
                 end # if wantT
             end # ℍ[l,l-1] was negligible (l > 1)
             # exit this loop if a submatrix of order 1 or 2 split off
@@ -705,6 +731,7 @@ function pschur!(H1H::S1,
                 if wantZ
                     rmul!(view(Z[1], 1:n, k:(k + nr - 1)), hr)
                 end
+                @_dbg_rpschur checkfac1("in QR $k")
                 for j in p:-1:2
                     # transform nr by nr submatrix of H[j] at [k,k] to upper triangular
                     Hj = Hs[j - 1]
@@ -745,7 +772,8 @@ function pschur!(H1H::S1,
                     end
                     showmat("T k=$k", j)
                 end # j loop (statement 140)
-                showprod("k=$k")
+                @_dbg_rpschur checkfac1("after QR $k")
+                verbosity[] > 2 && showprod("k=$k")
             end # k loop (double shift QR)
             its += 1
         end # QR iteration loop (statement 160)
@@ -895,6 +923,7 @@ function pschur!(H1H::S1,
         maxitleft -= its
         i = l - 1
     end # while, main loop
+    @_dbg_rpschur checkfac1("after main loop")
     # next block is not in MB02WD, but needed to clear out dust.
     # I probably applied a reflector or rotation to an extra row somewhere
     # giving roundoff instead of 0
