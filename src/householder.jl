@@ -23,6 +23,38 @@ function _norm2(x::AbstractVector{T}) where {T<:Real}
     return scale * sqrt(ssq)
 end
 
+function _norm2(x::AbstractVector{T}) where {T<:Complex}
+    require_one_based_indexing(x)
+    n = length(x)
+    RT = real(T)
+    n < 1 && return zero(RT)
+    n == 1 && return abs(x[1])
+    scale = zero(RT)
+    ssq = zero(RT)
+    for xx in x
+        xr,xi = reim(xx)
+        if !iszero(xr)
+            a = abs(xr)
+            if scale < a
+                ssq = one(RT) + ssq * (scale / a)^2
+                scale = a
+            else
+                ssq += (a / scale)^2
+            end
+        end
+        if !iszero(xi)
+            a = abs(xi)
+            if scale < a
+                ssq = one(RT) + ssq * (scale / a)^2
+                scale = a
+            else
+                ssq += (a / scale)^2
+            end
+        end
+    end
+    return scale * sqrt(ssq)
+end
+
 # The reflector! code in stdlib has no underflow or accuracy protection
 
 # These are translations of xLARFG from LAPACK
@@ -75,6 +107,66 @@ function _xreflector!(x::AbstractVector{T}) where {T<:Real}
     return τ
 end
 
+function _xreflector!(x::AbstractVector{T}) where {T<:Complex}
+    require_one_based_indexing(x)
+    n = length(x)
+    # we need to make subdiagonals real so the n=1 case is nontrivial for complex eltype
+    n < 1 && return zero(T)
+    RT = real(T)
+    sfmin = floatmin(RT) / eps(RT)
+    @inbounds begin
+        α = x[1]
+        αr, αi = reim(α)
+        xnorm = _norm2(view(x,2:n))
+        if iszero(xnorm) && iszero(αi)
+            return zero(T)
+        end
+        β = -copysign(_hypot3(αr, αi, xnorm), αr)
+        kount = 0
+        smallβ = abs(β) < sfmin
+        if smallβ
+            # recompute xnorm and β if needed for accuracy
+            rsfmin = one(real(T)) / sfmin
+            while smallβ
+                kount += 1
+                for j in 2:n
+                    x[j] *= rsfmin
+                end
+                β *= rsfmin
+                αr *= rsfmin
+                αi *= rsfmin
+                smallβ = (abs(β) < sfmin) && (kount < 20)
+            end
+            # now β ∈ [sfmin,1]
+            xnorm = _norm2(view(x,2:n))
+            α = complex(αr, αi)
+            β = -copysign(_hypot3(αr, αi, xnorm), αr)
+        end
+        τ = complex((β - αr) / β, -αi / β)
+        t = one(T) / (α - β)
+        for j in 2:n
+            x[j] *= t
+        end
+        for j in 1:kount
+            β *= sfmin
+        end
+        x[1] = β
+    end
+    return τ
+end
+
+# As of v1.5, Julia hypot() w/ >2 args is unprotected (the documentation lies),
+# so we need this.
+# translation of dlapy3, assuming NaN propagation
+function _hypot3(x::T, y::T, z::T) where {T}
+    xa = abs(x)
+    ya = abs(y)
+    za = abs(z)
+    w = max(xa, ya, za)
+    rw = one(real(T)) / w
+    r::real(T) = w * sqrt((rw * xa)^2 + (rw * ya)^2 + (rw * za)^2)
+    return r
+end
 
 # copied from Andreas Noack's GenericLinearAlgebra.jl, with trivial mods
 
