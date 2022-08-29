@@ -524,7 +524,10 @@ function pschur!(H1H::S1,
             end # k loop, search for small subdiagonal
             verbosity[] > 1 && !found && println("smallest subdiag: $xmin")
 
-            l = found ? klast : 1
+            # above loop translates Fortran DO K=I,L+1,-1
+            # this sets K to I even if I<=L, and sets K to L at end if unbroken.
+            # Next line translates L = K after loop
+            l = (i > l) ? (found ? klast : l) : i
 
             if l > 1
                 # ℍ[l,l-1] is negligible
