@@ -1,7 +1,82 @@
-# copied from Andreas Noack's GenericLinearAlgebra.jl, with trivial mods
-
 import Base: *, eltype, size
 import LinearAlgebra: adjoint, lmul!, rmul!, BlasReal
+
+# stdlib norm2 uses a poorly implemented generic scheme for short vectors.
+function _norm2(x::AbstractVector{T}) where {T<:Real}
+    require_one_based_indexing(x)
+    n = length(x)
+    n < 1 && return zero(T)
+    n == 1 && return abs(x[1])
+    scale = zero(T)
+    ssq = zero(T)
+    for xi in x
+        if !iszero(xi)
+            a = abs(xi)
+            if scale < a
+                ssq = one(T) + ssq * (scale / a)^2
+                scale = a
+            else
+                ssq += (a / scale)^2
+            end
+        end
+    end
+    return scale * sqrt(ssq)
+end
+
+# The reflector! code in stdlib has no underflow or accuracy protection
+
+# These are translations of xLARFG from LAPACK
+# LAPACK Copyright:
+# Univ. of Tennessee
+# Univ. of California Berkeley
+# Univ. of Colorado Denver
+# NAG Ltd.
+function _xreflector!(x::AbstractVector{T}) where {T<:Real}
+    require_one_based_indexing(x)
+    n = length(x)
+    n <= 1 && return zero(T)
+    sfmin = 2floatmin(T) / eps(T)
+    @inbounds begin
+        α = x[1]
+        xnorm = _norm2(view(x,2:n))
+        if iszero(xnorm)
+            return zero(T)
+        end
+        β = -copysign(hypot(α, xnorm), α)
+        kount = 0
+        smallβ = abs(β) < sfmin
+        if smallβ
+            # recompute xnorm and β if needed for accuracy
+            rsfmin = one(T) / sfmin
+            while smallβ
+                kount += 1
+                for j in 2:n
+                    x[j] *= rsfmin
+                end
+                β *= rsfmin
+                α *= rsfmin
+                # CHECKME: is 20 adequate for BigFloat?
+                smallβ = (abs(β) < sfmin) && (kount < 20)
+            end
+            # now β ∈ [sfmin,1]
+            xnorm = _norm2(view(x,2:n))
+            β = -copysign(hypot(α, xnorm), α)
+        end
+        τ = (β - α) / β
+        t = one(T) / (α - β)
+        for j in 2:n
+            x[j] *= t
+        end
+        for j in 1:kount
+            β *= sfmin
+        end
+        x[1] = β
+    end
+    return τ
+end
+
+
+# copied from Andreas Noack's GenericLinearAlgebra.jl, with trivial mods
 
 """
 a Householder reflection represented as the essential part of the

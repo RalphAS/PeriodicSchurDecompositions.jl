@@ -10,7 +10,7 @@ const slicot_shifts = Ref(true)
 
 import LinearAlgebra: lmul!, rmul!
 using LinearAlgebra: checksquare, require_one_based_indexing
-using LinearAlgebra: reflector!, Givens, givensAlgorithm
+using LinearAlgebra: Givens, givensAlgorithm
 
 export pschur, pschur!, phessenberg!, gpschur, PeriodicSchur, GeneralizedPeriodicSchur
 
@@ -92,6 +92,8 @@ end
 Base.propertynames(P::PeriodicSchur) = (:period, fieldnames(typeof(P))...)
 
 include("householder.jl")
+# const _reflector! = LinearAlgebra.reflector!
+const _reflector! = _xreflector!
 
 """
     pschur(A::Vector{S<:StridedMatrix}, lr::Symbol) -> F::PeriodicSchur
@@ -229,14 +231,14 @@ function phessenberg!(A::AbstractVector{S}) where {S <: AbstractMatrix{T}} where
         for j in p:-1:2
             # using a view stores the reflectors in A a la LAPACK
             ξ = view(A[j], i:n, i)
-            t = reflector!(ξ)
+            t = _reflector!(ξ)
             H = Householder{T, typeof(ξ)}(view(ξ, 2:(n - i + 1)), t)
             τ[j][i] = H.τ
             lmul!(H', view(A[j], i:n, i1:n))
             rmul!(view(A[j - 1], :, i:n), H)
         end
         ξ = view(A[1], i1:n, i)
-        t = reflector!(ξ)
+        t = _reflector!(ξ)
         H = Householder{T, typeof(ξ)}(view(ξ, 2:(n - i)), t)
         τ[1][i] = H.τ
         lmul!(H', view(A[1], i1:n, i1:n))
@@ -543,7 +545,7 @@ function pschur!(H1H::S1,
                                 end
                                 # reflector to annihilate Hⱼ[k,k-1]
                                 ξ = [Hj[k, k], Hj[k, k - 1]]
-                                t = reflector!(ξ)
+                                t = _reflector!(ξ)
                                 Hj[k, (k - 1):k] .= (zero(T), ξ[1])
                                 hr = HH2(ξ[2], one(T), t)
                                 rmul!(view(Hj, i1:(k - 1), (k - 1):k), hr)
@@ -556,7 +558,7 @@ function pschur!(H1H::S1,
                             if k < i
                                 # compute reflector to annihilate Hₚ[k+1,k]
                                 ξ = [Hp[k + 1, k + 1], Hp[k + 1, k]]
-                                t = reflector!(ξ)
+                                t = _reflector!(ξ)
                                 Hp[k + 1, k:(k + 1)] .= (zero(T), ξ[1])
                                 hr = HH2(ξ[2], one(T), t)
                                 rmul!(view(Hp, i1:k, k:(k + 1)), hr)
@@ -713,7 +715,7 @@ function pschur!(H1H::S1,
                     # otherwise use v from above
                 end
                 ξ = view(v, 1:nr)
-                t = reflector!(ξ)
+                t = _reflector!(ξ)
                 hr = Householder{T, typeof(ξ)}(view(ξ, 2:nr), t)
                 if k > mlast
                     H1[k, k - 1] = v[1] # CHECKME: did reflector! update this like dlarfg?
@@ -740,7 +742,7 @@ function pschur!(H1H::S1,
                     Hj = Hs[j - 1]
                     v[1:nr] .= Hj[k:(k + nr - 1), k]
                     ξ = view(v, 1:nr)
-                    t = reflector!(ξ)
+                    t = _reflector!(ξ)
                     hr = Householder{T, typeof(ξ)}(view(ξ, 2:nr), t)
                     Hj[k:(k + 1), k] .= (v[1], zero(T))
                     if nr == 3
@@ -759,7 +761,7 @@ function pschur!(H1H::S1,
                     if nr == 3
                         v[1:2] .= Hj[(k + 1):(k + 2), k + 1]
                         ξ = view(v, 1:2)
-                        t = reflector!(ξ)
+                        t = _reflector!(ξ)
                         hr = Householder{T, typeof(ξ)}(view(ξ, 2:2), t)
                         Hj[(k + 1):(k + 2), k + 1] .= (v[1], zero(T))
                         lmul!(hr', view(Hj, (k + 1):(k + 2), (k + 2):i2))
@@ -859,7 +861,7 @@ function pschur!(H1H::S1,
                             Hj = Hs[j - 1]
                         end
                         ξ = [Hj[i, i], Hj[i, i - 1]]
-                        t = reflector!(ξ)
+                        t = _reflector!(ξ)
                         hr = HH2(ξ[2], one(T), t)
                         Hj[i, (i - 1):i] .= (zero(T), ξ[2])
                         rmul!(view(Hj, i1:(i - 1), (i - 1):i), hr)
@@ -890,7 +892,7 @@ function pschur!(H1H::S1,
                         # reflector to annihilate Hⱼ[i,i-1] from the left
                         v[1:2] .= (Hj[i - 1, i - 1], Hj[i, i - 1])
                         ξ = view(v, 1:2)
-                        t = reflector!(ξ)
+                        t = _reflector!(ξ)
                         hr = Householder{T, typeof(ξ)}(view(ξ, 2:2), t)
                         Hj[(i - 1):i, i - 1] .= (v[1], zero(T))
                         lmul!(hr', view(Hj, (i - 1):i, i:i2))

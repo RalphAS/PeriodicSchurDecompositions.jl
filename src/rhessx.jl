@@ -68,7 +68,7 @@ function _rphessenberg!(Ap::AbstractMatrix{T}, A::AbstractVector{S},
         i = n + 1
         i1 = i - 1
         ξ = conj.(Ap[i, i1:-1:1])
-        t = reflector!(ξ)
+        t = _reflector!(ξ)
         ξr = ξ[i1:-1:2]
         H = RHouseholder{T, typeof(ξr)}(ξr, t)
         # lmul!(H, view(A[p-1], 1:i1, 1:i1))
@@ -81,7 +81,7 @@ function _rphessenberg!(Ap::AbstractMatrix{T}, A::AbstractVector{S},
         # i2 = max(i-2,1)
         for l in (p - 1):-1:1
             ξ = conj.(A[l][i, i:-1:1])
-            t = reflector!(ξ)
+            t = _reflector!(ξ)
             ξr = ξ[i:-1:2]
             H = RHouseholder{T, typeof(ξr)}(ξr, t)
             Al1 = l == 1 ? Ap : A[l - 1]
@@ -91,7 +91,7 @@ function _rphessenberg!(Ap::AbstractMatrix{T}, A::AbstractVector{S},
             rmul!(view(Q[l], :, 1:i), H')
         end
         ξ = conj.(Ap[i, i1:-1:1])
-        t = reflector!(ξ)
+        t = _reflector!(ξ)
         ξr = ξ[i1:-1:2]
         H = RHouseholder{T, typeof(ξr)}(ξr, t)
         lmul!(H, view(A[p - 1], 1:i1, :))
