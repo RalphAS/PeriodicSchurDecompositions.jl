@@ -275,6 +275,8 @@ end
 
 # mainly translated from SLICOT routine MB03WD, by V.Sima following A.Varga
 # SLICOT Copyright (c) 2002-2020 NICONET e.V.
+# SLICOT (following LAPACK) allows limiting QR to a lower portion of the system.
+# This is dangerous for some matrices, so it is suppressed by default.
 """
     pschur!(H1,Hs) -> PeriodicSchur
 
@@ -291,7 +293,9 @@ function pschur!(H1H::S1,
                  wantZ::Bool = true,
                  Q = nothing,
                  maxitfac = 30,
-                 rev = false) where {S1 <: Union{UpperHessenberg{T}, StridedMatrix{T}},
+                 rev = false,
+                 allow_early_QR = false
+                 ) where {S1 <: Union{UpperHessenberg{T}, StridedMatrix{T}},
                                      S <: StridedMatrix{T}} where {T <: Real}
     p = length(Hs) + 1
     n = size(H1H, 1)
@@ -699,9 +703,11 @@ function pschur!(H1H::S1,
                 end
             end
 
-            local mlast # where to start QR
             # look for two consecutive small subdiagonals and construct bulge reflector
-            for m in (i - 2):-1:l
+            # Note: Fortran loop has break for M = L so no final decrement
+            mmax = allow_early_QR ? (i - 2) : l
+            mlast = mmax # where to start QR
+            for m in mmax:-1:l
                 mlast = m
                 # determine the effect of starting double-shift QR iteration
                 # at row m; see if this would make ℍ[m,m-1] negligible
