@@ -118,7 +118,8 @@ Same as [`pschur`](@ref) but uses the input matrices `A` as workspace.
 function pschur!(A::AbstractVector{S},
                  lr::Symbol = :R;
                  wantZ::Bool = true,
-                 wantT::Bool = true) where {S <: AbstractMatrix{T}} where {T <: Real}
+                 wantT::Bool = true,
+                 maxitfac=30) where {S <: AbstractMatrix{T}} where {T <: Real}
     orient = char_lr(lr)
     p = length(A)
     if orient == 'L'
@@ -144,7 +145,8 @@ function pschur!(A::AbstractVector{S},
         Hs = [pH[j].R for j in 1:(p - 1)]
     end
     H1.H .= triu(H1.H, -1)
-    F = pschur!(H1.H, Hs, wantT = wantT, wantZ = wantZ, Q = Q, rev = (orient == 'L'))
+    F = pschur!(H1.H, Hs, wantT = wantT, wantZ = wantZ, Q = Q, rev = (orient == 'L'),
+                maxitfac = maxitfac)
 end
 
 function char_lr(lr::Symbol)
