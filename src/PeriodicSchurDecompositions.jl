@@ -356,11 +356,9 @@ function pschur!(H1H::S1,
     Hp = p == 1 ? H1 : Hs[p - 1]
 
     function showmat(str, j)
-        if verbosity[] > 2
-            print(str, " H[$j] ")
-            show(stdout, "text/plain", j == 1 ? H1 : Hs[j - 1])
-            println()
-        end
+        print(str, " H[$j] ")
+        show(stdout, "text/plain", j == 1 ? H1 : Hs[j - 1])
+        println()
         nothing
     end
 
@@ -381,7 +379,7 @@ function pschur!(H1H::S1,
     end
 
     function showprod(str)
-        if verbosity[] > 2 && p > 1
+        if p > 1
             Htmp = copy(H1)
             for j in 2:p
                 Htmp = Htmp * Hs[j - 1]
@@ -394,10 +392,15 @@ function pschur!(H1H::S1,
         nothing
     end
 
-    for j in 1:p
-        showmat("begin", j)
+    if verbosity[] > 2
+        showprod("begin")
+        showmat("begin", 1)
     end
-    (p > 1) && showprod("begin")
+    if verbosity[] > 3
+        for j in 2:p
+            showmat("begin", j)
+        end
+    end
 
     maxit = maxitfac * n
     maxitleft = maxit
@@ -563,7 +566,7 @@ function pschur!(H1H::S1,
                                     rmul!(view(Z[1], :, k:(k + 1)), hr)
                                 end
                             end
-                            showprod("prep k=$k")
+                            verbosity[] > 2 && showprod("prep k=$k")
                         end # k loop (110)
                         Hp[l, l - 1] = zero(T)
                     end # if subdiagonals were annihilated
@@ -724,10 +727,10 @@ function pschur!(H1H::S1,
 
                 lmul!(hr', view(H1, k:(k + nr - 1), k:i2))
                 str = (k == mlast) ? "bulge" : "chase"
-                showmat("L $str k=$k", 1)
+                verbosity[] > 2 && showmat("L $str k=$k", 1)
                 rmul!(view(Hp, i1:(i1 + nrow - 1), k:(k + nr - 1)), hr)
-                (p == 1) && showmat("R k=$k", p)
-                showprod("after exterior")
+                verbosity[] > 2 && (p == 1) && showmat("R k=$k", p)
+                verbosity[] > 2 && showprod("after exterior")
                 if wantZ
                     rmul!(view(Z[1], 1:n, k:(k + nr - 1)), hr)
                 end
@@ -770,7 +773,7 @@ function pschur!(H1H::S1,
                             rmul!(view(Z[j], 1:n, (k + 1):(k + 2)), hr)
                         end
                     end
-                    showmat("T k=$k", j)
+                    verbosity[] > (j == 1 ? 2 : 3) && showmat("T k=$k", j)
                 end # j loop (statement 140)
                 @_dbg_rpschur checkfac1("after QR $k")
                 verbosity[] > 2 && showprod("k=$k")

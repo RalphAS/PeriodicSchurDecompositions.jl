@@ -241,7 +241,7 @@ function pschur!(H1H::Th1, Hs::AbstractVector{Th},
         nothing
     end
     function showprod(str)
-        if verbosity[] > 1 && p > 1
+        if verbosity[] > 2 && p > 1
             Htmp = copy(H1)
             for l in 2:p
                 Htmp = Htmp * Hs[l - 1]
@@ -777,27 +777,31 @@ function pschur!(H1H::Th1, Hs::AbstractVector{Th},
             if mod(iiter, 10) == 0
                 # exceptional shift
                 # (from here, results must differ from Fortran version)
-                verbosity[] > 0 && println("using exceptional shift")
+                verbosity[] > 1 && println("using exceptional shift")
                 fgtmp = rand(T, 2)
                 c, s, _ = givensAlgorithm(fgtmp[1], fgtmp[2])
             else
                 # normal single shift
                 c, s, _ = givensAlgorithm(one(T), one(T))
+                hll = one(T)
                 for l in p:-1:2
                     Hl = Hs[l - 1]
                     if S[l]
                         c, s, _ = givensAlgorithm(Hl[ifirst, ifirst] * c,
                                                   Hl[ilast, ilast] * conj(s))
+                        hll *= Hl[ilast, ilast]
                     else
                         c, s, _ = givensAlgorithm(Hl[ilast, ilast] * c,
                                                   -Hl[ifirst, ifirst] * conj(s))
                         s = -s
+                        hll /= Hl[ilast, ilast]
                     end
                 end
                 c, s, _ = givensAlgorithm(H1[ifirst, ifirst] * c -
                                           H1[ilast, ilast] * conj(s),
                                           H1[ifirst + 1, ifirst] * c)
-                verbosity[] > 2 && println("initial c,s: $c, $s")
+                hll *= H1[ilast, ilast]
+                verbosity[] > 1 && println("initial c,s: $c, $s, H[l,l]=$hll")
             end
             # do the sweeps
             for j1 in (ifirst - 1):(ilast - 2)
@@ -845,7 +849,7 @@ function pschur!(H1H::Th1, Hs::AbstractVector{Th},
                     showallmats(str)
                 end
             end # end of qz loop
-            verbosity[] == 2 && showallmats("after qz loop")
+            verbosity[] > 2 && showallmats("after qz loop")
         end # if doqziter
     end # iteration loop
     if !done
@@ -1211,6 +1215,8 @@ end
 Verify integrity of a (generalized) periodic Schur decomposition.
 Returns a status code (Bool) and a vector of
 normalized factorization errors (which should be O(1)).
+
+WARNING: this function assumes dominant entries in `As` are O(1).
 """
 function checkpsd(P::AbstractPeriodicSchur{T}, Hs::AbstractVector;
                   quiet = false, thresh = 100, strict = false) where {T}
@@ -1246,7 +1252,13 @@ function checkpsd(P::AbstractPeriodicSchur{T}, Hs::AbstractVector;
         l1 = mod(l, p) + 1
         Tl = Ts[l]
         cmp = strict ? 0 : ttol * eps(real(T)) * n
-        if norm(tril(Tl, -1)) > cmp
+        if T <: Real && l == P.schurindex
+            # FIXME: we should also check first subdiag for real eigvals
+            tval = tril(Tl, -2)
+        else
+            tval = tril(Tl, -1)
+        end
+        if norm(tval) > cmp
             if !quiet
                 @warn "triangularity fails for l=$l"
             end
@@ -1268,7 +1280,7 @@ function checkpsd(P::AbstractPeriodicSchur{T}, Hs::AbstractVector;
         err[l] = norm(Hx - Hl) / eps(real(T)) / n
         if err[l] > thresh
             if !quiet
-                @warn "large factorization error for l=$l"
+                @warn "large factorization error ($(err[l]) nϵ) for l=$l"
             end
             result = false
         end
