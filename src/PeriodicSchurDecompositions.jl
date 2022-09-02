@@ -935,10 +935,22 @@ function pschur!(H1H::S1,
                         end
                     end
                 else
-                    # if two real eigvals and nontrivial chain, another rotation is needed
+                    # If two real eigvals and nontrivial chain, another rotation is needed
                     # otherwise use G computed above
-                    realpair = jmax > 0 && hsubdiag[i - 1] == 0
-                    if realpair
+                    replaceG = jmax > 0 && hsubdiag[i - 1] == 0
+                    # If one eigval is tiny, the rotation from ℍ is also inadequate
+                    # These cases are not handled in MB03WD
+                    if λ[i] * λ[i-1] == 0
+                        replaceG = true
+                    elseif hsubdiag[i - 1] == 0
+                        a1,a2 = abs.(λ[i-1:i])
+                        # CHECKME: this suffices for cases seen so far, but is not
+                        # supported by analysis
+                        if min(a1,a2) / max(a1,a2) < eps(T)
+                            replaceG = true
+                        end
+                    end
+                    if replaceG
                         G, _ = givens(H1[i - 1, i - 1], H1[i, i - 1], 1, 2)
                         verbosity[] > 1 && println("nontrivial chain, reals")
                     end
@@ -974,7 +986,7 @@ function pschur!(H1H::S1,
                     elseif hh21 == 0
                         H1[i, i - 1] = zero(T)
                     end
-                    if realpair
+                    if replaceG
                         # sometimes the rotation swaps the eigvals
                         λ[i - 1] = H1[i - 1, i - 1]
                         λ[i] = H1[i, i]
