@@ -376,6 +376,11 @@ function pschur!(H1H::S1,
     function saveA1()
         if wantZ
             A1init = Z[1] * H1 * Z[2]'
+            if _dbg_detail[] > 0
+                print("A1 (initial):")
+                show(stdout, "text/plain",  A1init)
+                println()
+            end
         else
             _printsty(:cyan, "no H1 check w/o Z")
         end
@@ -386,8 +391,20 @@ function pschur!(H1H::S1,
             A1tmp = Z[1] * H1 * Z[2]'
             println(str, " H1 factor error: ", norm(A1tmp - A1init))
             if detail
-                @show A1init
-                @show  A1tmp
+                print("A1 (current):")
+                show(stdout, "text/plain",  A1tmp)
+                println()
+                if _dbg_detail[] > 0
+                    print("Z[1]:")
+                    show(stdout, "text/plain",  Z[1])
+                    println()
+                    print("Z[2]:")
+                    show(stdout, "text/plain",  Z[2])
+                    println()
+                    print("H1")
+                    show(stdout, "text/plain",  H1)
+                    println()
+                end
             end
         end
     end
@@ -432,14 +449,12 @@ function pschur!(H1H::S1,
     while i >= 1
         verbosity[] > 0 && println("starting block i=$i")
         # eigvals i+1:n have converged
-        l = 1
-        # each iteration works with active block [l:i,l:i]
-        # either l=1 or H[l,l-1] is negligible
 
         # perform QR iterations on [1:i,1:i] until a submatrix of order 1 or 2 splits
         # off at the bottom
 
         # Let 𝕋 = H₂*H₃*...*Hₚ and ℍ = H₁ * T
+        l = 1
         its = 1
         while its < maxitleft
             verbosity[] > 0 && println("QR iteration l=$l i=$i, iter $its")
@@ -512,17 +527,9 @@ function pschur!(H1H::S1,
 
                 if slicot_convg[]
                     found = abs(hh21) <= max(ulp*tst1, smlnum)
-                    # CHECKME:
-                    # this is not in SLICOT MB03WD
-                    # logic below handles double deflation, but one can't get there
-                    # without something like this
-                    if found && (k > l + 1) && (abs(hh10) <= max(ulp*tst1, smlnum))
-                        klast -= 1
-                    end
                 else
-
                     # LAPACK has smlnum on the right, but that may lead to pointless
-                    # iterations for tiny eigvals. We 
+                    # iterations for tiny eigvals. We may want
                     # if abs(hh21) <= max(ulp^2 * tst1, smlnum)
                     if abs(hh21) <= smlnum
                         found = true
@@ -554,10 +561,16 @@ function pschur!(H1H::S1,
             end # k loop, search for small subdiagonal
             verbosity[] > 1 && !found && println("smallest subdiag: $xmin")
 
-            # above loop translates Fortran DO K=I,L+1,-1
-            # this sets K to I even if I<=L, and sets K to L at end if unbroken.
+            # The above loop translates Fortran DO K=I,L+1,-1
+            # which sets K to I even if I<=L, and sets K to L at end if unbroken.
+            # (The last is true for all Fortran compilers known to me, but NOT
+            # guaranteed by the Fortran standard AFAICT; this logic
+            # is inherited from LAPACK.)
             # Next line translates L = K after loop
             l = (i > l) ? (found ? klast : l) : i
+
+            # each iteration works with active block [l:i,l:i]
+            # either l=1 or ℍ[l,l-1] is negligible
 
             if l > 1
                 # ℍ[l,l-1] is negligible
