@@ -251,3 +251,15 @@ function gpschur_test(A::AbstractVector{TM}, S; left=false
 
     gpschur_check(A, S, pS)
 end
+
+# generate matrices with exponentially split eigvals, from Kressner 2001.
+function expsplit(p,T)
+    fac = 0.1
+    A1 = T.([9 4 1 4 3 4; 6 8 2 4 0 2; 0 7 4 4 6 6; 0 0 8 4 6 7; 0 0 0 8 9 3; 0 0 0 0 5 0])
+    Aj = Matrix(Diagonal(T.([fac,fac^2,fac^3,1,1,1])))
+    A = vcat([A1],[copy(Aj) for _ in 1:p-1])
+    # these are (obviously) approximate, and asymptotic values, so test accordingly
+    λ = [15.6284,-1.31418-3.51424im,-1.31418+3.51424im,90*fac^p,(1600/3)*fac^(2*p),
+         -(71750/11)*fac^(3*p)]
+    return A, λ
+end

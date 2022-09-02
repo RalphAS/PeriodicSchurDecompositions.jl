@@ -7,7 +7,7 @@ using Random
 using GenericSchur
 
 include("testfuncs.jl")
-include("krylov.jl")
+
 # Can't test exotic types unless someone implements
 # lmul!(HessenbergQ{T},Vector{T}), equiv. to LAPACK.ormhr!
 # or Matrix(HessenbergQ{T}), equiv to LAPACK.orghr!
@@ -65,6 +65,27 @@ for T in [Float64]
   end
 end
 
+for T in [Float64, ComplexF64]
+  @testset "Periodic Schur exp. split Hess+UT $T" begin
+   for p in [5,20]
+       A,λ = expsplit(p,T)
+       Awrk = deepcopy(A)
+       ps  = pschur!(Awrk, :R, wantZ=true)
+       pschur_check(A, ps, checkλ=false, tol=128)
+       λs = ps.values
+       for λj in λ
+           dmin, idmin = findmin(abs.(λs .- λj))
+           developing && println("ES $p $T λ=$λj min err: $dmin")
+           @test (dmin .< 0.001 * abs(λj)) || (max(abs(λj),abs(λs[idmin])) < eps(real(T))^2)
+       end
+       A[1], A[p] = A[p], A[1]
+       Awrk = deepcopy(A)
+       ps  = pschur!(Awrk, :L, wantZ=true)
+       pschur_check(A, ps, checkλ=false, tol=128)
+    end
+  end
+end
+
 for T in [Float64, BigFloat]
   @testset "Periodic Schur full $T" begin
     for p in [1,2,3,5]
@@ -113,3 +134,5 @@ end
 include("generalized.jl")
 
 include("ordschur.jl")
+
+include("krylov.jl")
