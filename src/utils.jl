@@ -119,9 +119,10 @@ end
 
 # avoid crypic LAPACK exception
 function _checkqr(F)
-    @inbounds for jj in diagind(F.R)
-        if F.R[jj] == 0
-            n = size(F.R, 1)
+    R = F.R
+    @inbounds for jj in diagind(R)
+        if R[jj] == 0
+            n = size(R, 1)
             j = (jj - 1) ÷ n + 1
             throw(SingularException(j))
         end
