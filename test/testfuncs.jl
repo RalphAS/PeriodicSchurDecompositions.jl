@@ -12,8 +12,17 @@ else
     Random.seed!(1234)
 end
 
-# "developing" means some tests turn into warnings so we get more evidence in each run.
+# "developing" means some tests turn into warnings
+# so we get more evidence in each run.
 developing = iseed >= 0
+
+# This allows us to compare eigvals against ordinary QZ
+# (visually and only in developing mode);
+# the alternative is more typical of real usage.
+const SINGLE_MINUS_SIG = Ref(false)
+if developing
+    SINGLE_MINUS_SIG[] = parse(Int, get(ENV, "PS_QZ1", "0")) > 0
+end
 
 # this is designed for a mixture of real and conjugate pairs, not general
 function compare_reigvals(λ,λx,λtol)
@@ -225,6 +234,153 @@ function gpschur_check(A::AbstractVector{TM}, S, pS;
     end
 end
 
+# maintain a separate version for real eltype until it works
+function gpschur_check(A::AbstractVector{TM}, S, pS;
+                       qtol = 10, tol = 100, λtol = 1000
+                       ) where {TM <: AbstractMatrix{T}} where T <: Real
+    p = length(S)
+    left = pS.orientation == 'L'
+    n = size(A[1],1)
+    simple = all(S)
+    js = pS.schurindex
+    jt = 0
+    Ts = []
+    for j in 1:p
+        if j == js
+            push!(Ts, Matrix(pS.T1))
+        else
+            jt += 1
+            push!(Ts, Matrix(pS.T[jt]))
+        end
+    end
+    Zs = pS.Z
+    l1 = (p==1) ? 1 : 2
+    if S[1] ⊻ left
+        Ax = [Zs[1]*Ts[1]*Zs[l1]']
+    else
+        Ax = [Zs[l1]*Ts[1]*Zs[1]']
+    end
+    for l in 2:p
+        if S[l] ⊻ left
+            push!(Ax,Zs[l]*Ts[l]*Zs[mod(l,p)+1]')
+        else
+            push!(Ax,Zs[mod(l,p)+1]*Ts[l]*Zs[l]')
+        end
+    end
+    for l in 1:p
+        if (l==js)
+            for i in 1:n-1
+                λi = pS.values[i]
+                if developing
+                    if isreal(λi) && (Ts[l][i+1,i] != 0)
+                        @warn "subdiagonal junk found in Schur matrix ($l of $p) of $(typeof(pS))"
+                        println("λ = $λi, subdiag is ",Ts[l][i+1,i])
+                    end
+                else
+                    if isreal(λi)
+                        @test Ts[l][i+1,i] == 0
+                    end
+                end
+            end
+        end
+
+        id = l == js ? -2 : -1
+        if developing
+            if norm(tril(Ts[l]), id) > 100 * eps(real(T)) * n
+                @warn "triangularity failure for l=$l"
+                display(Ts[l]); println()
+            end
+        else
+            # we have logic to ensure this now
+            @test istriu(Ts[l], id)
+        end
+        # orthonormality
+        @test norm(Zs[l]*Zs[l]' - I) < qtol * eps(real(T)) * n
+        # accuracy of decomposition
+        if developing
+            r = norm(A[l] - Ax[l]) / (eps(real(T)) * n)
+            if r > tol
+                @warn "residual[$l]: $r"
+            elseif r > 20
+                println("residual[$l]: $r")
+            end
+        else
+            @test norm(A[l] - Ax[l]) < tol * eps(real(T)) * n
+        end
+    end
+    # Check consistency of eigenvalues w/ Schur matrices
+    # TODO: fix for complex eigvals
+    # TODO: hard tests in case of over/underflow
+    λ = pS.values
+    λs = diag(pS.T1)
+    if !pS.S[pS.schurindex]
+        λs = one(T) ./ λs
+    end
+    il = 0
+    for l in 1:p
+        l == pS.schurindex && continue
+        il += 1
+        if pS.S[l]
+            λs .*= diag(pS.T[il])
+        else
+            λs .*= (one(T) ./ diag(pS.T[il]))
+        end
+    end
+    if developing && T <: LinearAlgebra.BlasFloat
+        if simple
+            if left
+                Aπ = foldl((x, y) -> y * x, A)
+            else
+                Aπ = prod(A)
+            end
+            λπ = eigvals(Aπ)
+        elseif count(S) == p-1
+            lb = findfirst(x -> !x, S)
+            B = A[lb]
+            Aπ = I
+            for il in 1:p-1
+                l = mod(lb + il - 1, p) + 1
+                if left
+                    Aπ = A[l] * Aπ
+                else
+                    Aπ = Aπ * A[l]
+                end
+            end
+            λπ = eigvals(Aπ, B)
+        elseif all(isfinite.(λ))
+            Aπ = S[1] ? A[1] : inv(A[1])
+            if left
+                for l in 2:p
+                    Aπ = (S[l] ? A[l] : inv(A[l])) * Aπ
+                end
+            else
+                for l in 2:p
+                    Aπ = Aπ * (S[l] ? A[l] : inv(A[l]))
+                end
+            end
+            λπ = eigvals(Aπ)
+        else
+            λπ = nothing
+        end
+        if λπ !== nothing
+            println("    ps.vals            diagprods             prodvals")
+            display(hcat(λ, λs, λπ))
+        else
+            println("ps.vals diagprods")
+            display(hcat(λ, λs))
+        end
+        println()
+    end
+    for j in 1:n
+        isreal(λ[j]) || continue
+        if isfinite(λs[j])
+            @test λ[j] ≈ λs[j]
+        else
+            @test !isfinite(λ[j])
+        end
+    end
+end
+
 function gpschur_test(A::AbstractVector{TM}, S; left=false
                       ) where {TM <: AbstractMatrix{T}} where T
     p = length(S)
@@ -233,7 +389,7 @@ function gpschur_test(A::AbstractVector{TM}, S; left=false
     # We want to call the specialized Hess+UT method so that roundoff does not
     # prevent checking the edge-case branches.
     tri0 = istriu(A[1],-1)
-    for l in 2:p-1
+    for l in 2:p
         tri0 &= istriu(A[l])
     end
     if !tri0

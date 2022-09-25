@@ -1009,6 +1009,7 @@ end
 include("rschur2x2.jl")
 
 include("generalized.jl")
+include("rgeneralized.jl")
 include("utils.jl")
 include("ordschur.jl")
 

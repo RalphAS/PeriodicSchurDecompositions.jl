@@ -4,6 +4,8 @@ const _r2verby = Ref(0)
 # development hack for independently checking the wrapup logic
 const _punting = Ref(false)
 
+# partial PQZ (just eigvals and flags) for 2x2 with single complex shift
+# this seems to be based on MB03BB, but I lost track
 function _rpeigvals2x2(A1::AbstractMatrix{T},
                        As::AbstractVector{TA},
                        S::AbstractVector{Bool},
@@ -57,6 +59,9 @@ function _rpeigvals2x2(A1::AbstractMatrix{T},
     maxiter = 80
     ulp = eps(T)
     if _punting[]
+        if !all(S)
+            throw(ArgumentError("punting not set up for generalized case"))
+        end
         # punt!
         Xc1 = Xs[1]
         Xcs = [Xs[l] for l in 2:k]
@@ -103,7 +108,7 @@ function _rpeigvals2x2(A1::AbstractMatrix{T},
                          z0 z11 z12;
                          z0 z21 z22]
                     if S[Aord[l]] != recip
-                        G1 = Givens(1, 3, ct, st)
+                        G1 = Givens(1, 3, complex(ct), st)
                         rmul!(Z, G1')
                         G2 = Givens(1, 2, complex(c), s)
                         rmul!(Z, G2')
@@ -225,8 +230,15 @@ function _rpeigvals2x2(A1::AbstractMatrix{T},
         beta[1], beta[2] = beta[2], beta[1]
         scal[1], scal[2] = scal[2], scal[1]
     end
-    # enforce standard for eigvals of real matrices
+    good = _sanitize_reigpair!(alpha, beta, scal)
+    return alpha, beta, scal, converged, good
+end
+
+# enforce standard for eigvals of 2x2 real matrices
+function _sanitize_reigpair!(alpha::AbstractVector{Complex{T}}, beta, scal
+                             ) where {T}
     good = true
+    ulp = eps(T)
     if any(imag.(alpha) .!= 0)
         sl = scal[1] - scal[2]
         if sl >= 0
@@ -259,5 +271,47 @@ function _rpeigvals2x2(A1::AbstractMatrix{T},
             end
         end
     end
-    return alpha, beta, scal, converged, good
+    return good
+end
+
+# full generalized PQZ for 2x2 with single real shift
+# Hessenberg is in last place
+# based on MB03BF
+function _rp2x2ssr!(H2s::Vector{TM}, S; maxit = 20
+                    ) where {TM <: AbstractMatrix{T}} where {T <: Real}
+    p = length(H2s)
+    ulp = eps(T)
+    done = false
+    for iter in 1:maxit
+        c, s = _qzrot2x2(H2s, S)
+        G = Givens(1, 2, c, s)
+        rmul!(H2s[p], G')
+        for l in 1:p-1
+            Hl = H2s[l]
+            if S[l]
+                lmul!(G, Hl)
+                c, s, r = givensAlgorithm(Hl[2, 2], -Hl[2, 1])
+                Hl[2, 2] = r
+                Hl[2, 1] = zero(T)
+                Hl[1, 1], Hl[1, 2] = (c * Hl[1, 1] + s * Hl[1, 2],
+                                      c * Hl[1, 2] - s * Hl[1, 1])
+            else
+                rmul!(Hl, G')
+                c, s, r = givensAlgorithm(Hl[1, 1], Hl[2, 1])
+                Hl[1, 1] = r
+                Hl[2, 1] = zero(T)
+                Hl[1, 2], Hl[2, 2] = (c * Hl[1, 2] + s * Hl[2, 2],
+                                      c * Hl[2, 2] - s * Hl[1, 2])
+            end
+            G = Givens(1, 2, c, s)
+        end
+        Hl = H2s[p]
+        lmul!(G, Hl)
+        done = (abs(Hl[2, 1]) < ulp * max(abs(Hl[1, 1]), abs(Hl[1, 2]),
+                                          abs(Hl[2, 2]))
+                )
+        done && break
+    end
+    # significant results are left in H2s
+    return done
 end

@@ -39,6 +39,139 @@ for T in [ComplexF64,Float64,Complex{BigFloat},BigFloat]
     end
 end
 
+for T in [Float64]
+    @testset "Generalized Periodic Schur left full $T" begin
+        for p in [4]
+            @testset "Generalized Periodic Schur left full $T p=$p" begin
+                n = 5
+                S = fill(true,p)
+                for j in p-1:-2:1
+                    S[j] = false
+                end
+                A = [rand(T,n,n) for j in 1:p]
+                gpschur_test(A,S;left=true)
+            end
+        end
+    end
+    @testset "Generalized Periodic Schur full $T" begin
+        for p in [4]
+            @testset "Generalized Periodic Schur full $T p=$p" begin
+                n = 5
+                S = [true,false,true,false]
+                A = [rand(T,n,n) for j in 1:p]
+                gpschur_test(A,S)
+            end
+        end
+    end
+end
+
+for T in [Float64,BigFloat,Complex{Float64},Complex{BigFloat}]
+    @testset "Generalized Periodic Schur Hess+UT $T (small)" begin
+        for p in [2,3,5]
+            @testset "Generalized Periodic Schur Hess+UT $T p=$p" begin
+                n = 5
+                S = [true,false,trues(p-2)...]
+                A = [triu(rand(T,n,n)) for j in 1:p]
+                A[1] = triu(rand(T,n,n),-1) # Hessenberg
+                gpschur_test(A,S)
+            end
+        end
+        p = 5
+        @testset "Generalized Periodic Schur Hess+UT $T p=$p w/ early +hole" begin
+            n = 5
+            if SINGLE_MINUS_SIG[]
+                S = [true,true,false,true,true]
+            else
+                S = [true,true,false,true,false]
+            end
+            A = [triu(rand(T,n,n)) for j in 1:p]
+            A[1] = triu(rand(T,n,n),-1) # Hessenberg
+            A[2][3,3] = 0
+            gpschur_test(A,S)
+        end
+        @testset "Generalized Periodic Schur Hess+UT $T p=$p w/ late +hole" begin
+            n = 5
+            if SINGLE_MINUS_SIG[]
+                S = [true,true,false,true,true]
+            else
+                S = [true,true,false,true,false]
+            end
+            A = [triu(rand(T,n,n)) for j in 1:p]
+            A[1] = triu(rand(T,n,n),-1) # Hessenberg
+            A[4][3,3] = 0
+            gpschur_test(A,S)
+        end
+        @testset "Generalized Periodic Schur Hess+UT $T p=$p w/ late upper -hole" begin
+            n = 5
+            if SINGLE_MINUS_SIG[]
+                S = [true,true,true,false,true]
+            else
+                S = [true,false,true,false,true]
+            end
+            A = [triu(rand(T,n,n)) for j in 1:p]
+            A[1] = triu(rand(T,n,n),-1) # Hessenberg
+            A[4][2,2] = 0
+            gpschur_test(A,S)
+        end
+        @testset "Generalized Periodic Schur Hess+UT $T p=$p w/ late lower -hole" begin
+            n = 5
+            if SINGLE_MINUS_SIG[]
+                S = [true,true,true,false,true]
+            else
+                S = [true,false,true,false,true]
+            end
+            A = [triu(rand(T,n,n)) for j in 1:p]
+            A[1] = triu(rand(T,n,n),-1) # Hessenberg
+            A[4][4,4] = 0
+            gpschur_test(A,S)
+        end
+        @testset "Generalized Periodic Schur Hess+UT $T p=$p w/ upper -hole" begin
+            n = 5
+            if SINGLE_MINUS_SIG[]
+                S = [true,false,true,true,true]
+            else
+                S = [true,false,true,false,true]
+            end
+            A = [triu(rand(T,n,n)) for j in 1:p]
+            A[1] = triu(rand(T,n,n),-1) # Hessenberg
+            A[2][2,2] = 0
+            gpschur_test(A,S)
+        end
+        @testset "Generalized Periodic Schur Hess+UT $T p=$p w/ lower -hole" begin
+            n = 5
+            if SINGLE_MINUS_SIG[]
+                S = [true,false,true,true,true]
+            else
+                S = [true,false,true,false,true]
+            end
+            A = [triu(rand(T,n,n)) for j in 1:p]
+            A[1] = triu(rand(T,n,n),-1) # Hessenberg
+            A[2][4,4] = 0
+            gpschur_test(A,S)
+        end
+    end
+end
+for T in [Complex{Float64}]
+    @testset "Periodic Schur Hess+UT, $T moderate N" begin
+        p=4
+        n=32
+        S = trues(p)
+        A = [triu(rand(T,n,n)) for j in 1:p]
+        A[1] = triu(rand(T,n,n),-1) # Hessenberg
+        A[2][3,3] = 0
+        gpschur_test(A,S)
+    end
+    @testset "Generalized Periodic Schur Hess+UT, $T moderate N" begin
+        p=4
+        n=32
+        S = [true,false,true,false]
+        A = [triu(rand(T,n,n)) for j in 1:p]
+        A[1] = triu(rand(T,n,n),-1) # Hessenberg
+        A[2][3,3] = 0 # make it singular just because we can
+        gpschur_test(A,S)
+    end
+end
+
 for T in [Complex{Float64}]
     @testset "Periodic Schur left full $T" begin
         for p in [5]
@@ -109,88 +242,6 @@ for T in [Complex{Float64}]
                 gpschur_test(A,S)
             end
         end
-    end
-end
-for T in [Complex{Float64},Complex{BigFloat}]
-    @testset "Generalized Periodic Schur Hess+UT $T (small)" begin
-        for p in [2,3,5]
-            @testset "Generalized Periodic Schur Hess+UT $T p=$p" begin
-                n = 5
-                S = [true,false,trues(p-2)...]
-                A = [triu(rand(T,n,n)) for j in 1:p]
-                A[1] = triu(rand(T,n,n),-1) # Hessenberg
-                gpschur_test(A,S)
-            end
-        end
-        p = 5
-        @testset "Generalized Periodic Schur Hess+UT $T p=$p w/ early +hole" begin
-            n = 5
-            S = [true,true,false,true,false]
-            A = [triu(rand(T,n,n)) for j in 1:p]
-            A[1] = triu(rand(T,n,n),-1) # Hessenberg
-            A[2][3,3] = 0
-            gpschur_test(A,S)
-        end
-        @testset "Generalized Periodic Schur Hess+UT $T p=$p w/ late +hole" begin
-            n = 5
-            S = [true,true,false,true,false]
-            A = [triu(rand(T,n,n)) for j in 1:p]
-            A[1] = triu(rand(T,n,n),-1) # Hessenberg
-            A[4][3,3] = 0
-            gpschur_test(A,S)
-        end
-        @testset "Generalized Periodic Schur Hess+UT $T p=$p w/ late upper -hole" begin
-            n = 5
-            S = [true,false,true,false,true]
-            A = [triu(rand(T,n,n)) for j in 1:p]
-            A[1] = triu(rand(T,n,n),-1) # Hessenberg
-            A[4][2,2] = 0
-            gpschur_test(A,S)
-        end
-        @testset "Generalized Periodic Schur Hess+UT $T p=$p w/ late lower -hole" begin
-            n = 5
-            S = [true,false,true,false,true]
-            A = [triu(rand(T,n,n)) for j in 1:p]
-            A[1] = triu(rand(T,n,n),-1) # Hessenberg
-            A[4][4,4] = 0
-            gpschur_test(A,S)
-        end
-        @testset "Generalized Periodic Schur Hess+UT $T p=$p w/ upper -hole" begin
-            n = 5
-            S = [true,false,true,false,true]
-            A = [triu(rand(T,n,n)) for j in 1:p]
-            A[1] = triu(rand(T,n,n),-1) # Hessenberg
-            A[2][2,2] = 0
-            gpschur_test(A,S)
-        end
-        @testset "Generalized Periodic Schur Hess+UT $T p=$p w/ lower -hole" begin
-            n = 5
-            S = [true,false,true,false,true]
-            A = [triu(rand(T,n,n)) for j in 1:p]
-            A[1] = triu(rand(T,n,n),-1) # Hessenberg
-            A[2][4,4] = 0
-            gpschur_test(A,S)
-        end
-    end
-end
-for T in [Complex{Float64}]
-    @testset "Periodic Schur Hess+UT, $T moderate N" begin
-        p=4
-        n=32
-        S = trues(p)
-        A = [triu(rand(T,n,n)) for j in 1:p]
-        A[1] = triu(rand(T,n,n),-1) # Hessenberg
-        A[2][3,3] = 0
-        gpschur_test(A,S)
-    end
-    @testset "Generalized Periodic Schur Hess+UT, $T moderate N" begin
-        p=4
-        n=32
-        S = [true,false,true,false]
-        A = [triu(rand(T,n,n)) for j in 1:p]
-        A[1] = triu(rand(T,n,n),-1) # Hessenberg
-        A[2][3,3] = 0 # make it singular just because we can
-        gpschur_test(A,S)
     end
 end
 

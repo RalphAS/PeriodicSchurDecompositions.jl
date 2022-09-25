@@ -55,14 +55,15 @@ is a factorization of the formal product `A[1]^(S[1]*A[2]^(S[2]*...*A[p]^(S[p])`
 The GPSD is an extension of the QZ decomposition used for generalized eigenvalue
 problems.
 
-This package currently provides a GPSD for complex element types. The PSD is obviously
+This package provides a GPSD for real and complex element types. The PSD is obviously
 a special case of the GPSD.
 
 The basic API is as follows:
 ```julia
 p = period_of_your_problem()
 Aarg = [your_complex_matrix(j) for j in 1:p]
-S = [sign_for_your_problem(j) for j in 1:p]
+signs = [sign_for_your_problem(j) for j in 1:p]
+S = [x > 0 for x in signs] # boolean vector
 gpS = pschur!(Aarg, S, :R)
 your_eigvals = gpS.values
 ```
