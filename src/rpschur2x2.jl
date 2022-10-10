@@ -315,3 +315,45 @@ function _rp2x2ssr!(H2s::Vector{TM}, S; maxit = 20
     # significant results are left in H2s
     return done
 end
+
+# 2x2 periodic Hessenberg-UT reduction
+# Centered on i1:i1+1 diagonal blocks, but transformations are applied
+# to the rest of As (well, the blocks we care about here...).
+# This one is leftwards-oriented, since it is needed for the reordering
+# codes based on Granat's papers.
+# On completion, the Hessenberg (full) one is As[1], the rightmost.
+# Warning: not tested on complex eltype; conjugations may be wrong.
+function _phess2x2!(As::AbstractVector{TM}, i1, S=nothing
+                 ) where {TM <: AbstractMatrix{T}} where {T}
+    k = length(As)
+    n = size(As[1], 1)
+    Qs = [Matrix{T}(I,n,n) for _ in 1:k]
+    notinverted(l) = (S === nothing) ? true : S[l]
+    i2 = i1 + 1
+    # As[1] is already Hessenberg, so start w/ As[2]
+    for l in 2:k
+        Al = As[l]
+        lp = mod(l,k) + 1
+        Ap = As[lp]
+        if notinverted(l)
+            ξ = Al[i1:i2,i1]
+            τ = _reflector!(ξ)
+            Al[i1:i2,i1] .= (ξ[1], zero(T))
+            hr = HH2(one(T), ξ[2], τ)
+            lmul!(hr', view(Al, i1:i2, i2:n))
+        else
+            ξ = [Al[i2,i2],Al[i2,i1]]
+            τ = _reflector!(ξ)
+            Al[i2,i1:i2] .= (zero(T), ξ[1])
+            hr = HH2(ξ[2], one(T), τ)
+            rmul!(view(Al, 1:i1, i1:i2), hr)
+        end
+        lmul!(hr', view(Qs[lp], i1:i2, i1:i2))
+        if notinverted(lp)
+            rmul!(view(Ap, 1:i2, i1:i2), hr)
+        else
+            lmul!(hr', view(Ap, i1:i2, i1:n))
+        end
+    end
+    return As, Qs
+end

@@ -5,7 +5,8 @@
 # StaticArrays
 
 # this is for left ordering: we are following Granat's papers
-function _swapadjqr!(T1::AbstractMatrix{T}, Ts, Zs, i1, p1, p2; sylcheck = false) where {T}
+function _swapadjqr!(T1::AbstractMatrix{T}, Ts, Zs, i1, p1, p2; sylcheck = false
+                     ) where {T}
     tol = T(100)
     vb = _ss_verby[]
     i2 = i1 + p1
@@ -90,57 +91,18 @@ function _swapadjqr!(T1::AbstractMatrix{T}, Ts, Zs, i1, p1, p2; sylcheck = false
     fillin = fillin1 || fillin2
     if fillin
         Ws = [Matrix{T}(I, m, m) for _ in 1:k]
-    end
-    if fillin1
-        # the fundamental form is left ordered with T1 rightmost
-        # Tₖ ... T₃ T₂ T₁
-        # phessenberg! is right ordered with H1 leftmost
-        # A₁ A₂    ... Aₖ = Q₁H₁Q₂' Q₂H₂Q₃' ... QₖHₖQ₁'
-        # so we circshift and relabel our series as the A's:
-        # T₁ Tₖ ... T₃ T₂
-        Th = [Txx[1][1:2, 1:2]]
-        for l in 1:(k - 1)
-            push!(Th, Txx[k + 1 - l][1:2, 1:2])
+        Trows = similar(Txx[1], 2, m) # workspace
+        Tcols = similar(Txx[1], m, 2)
+        if fillin1
+            _filled2hess!(Txx, Ws, 1, Trows, Tcols)
         end
-        H11, H1qs = phessenberg!(Th)
-        # don't copy like this unless we apply Q's to extra blocks
-        # Txx[1][1:2,1:2] .= H11.H
-        # for l in 1:k-1
-        #     Txx[k+1-l][1:2,1:2] .= Th[l+1].R
-        # end
-        j0 = 1
-        j1 = 2
-        for l in 1:k
-            q = l == 1 ? H11.Q : H1qs[l - 1].Q
-            lw = l < 3 ? (3 - l) : (k + 3 - l)
-            Tl = l == 1 ? Txx[1] : Txx[k + 2 - l]
-            Tp = Txx[lw]
-            rmul!(view(Tp, :, j0:j1), q)
-            rmul!(view(Ws[lw], :, j0:j1), q)
-            lmul!(q', view(Tl, j0:j1, :))
-        end
-    end
-    if fillin2
-        j0 = p2 + 1
-        j1 = j0 + 1
-        Th = [Txx[1][j0:j1, j0:j1]]
-        for l in 1:(k - 1)
-            push!(Th, Txx[k + 1 - l][j0:j1, j0:j1])
-        end
-        H21, H2qs = phessenberg!(Th)
-        for l in 1:k
-            q = l == 1 ? H21.Q : H2qs[l - 1].Q
-            lw = l < 3 ? (3 - l) : (k + 3 - l)
-            Tl = l == 1 ? Txx[1] : Txx[k + 2 - l]
-            Tp = Txx[lw]
-            rmul!(view(Tp, :, j0:j1), q)
-            rmul!(view(Ws[lw], :, j0:j1), q)
-            lmul!(q', view(Tl, j0:j1, :))
+        if fillin2
+            _filled2hess!(Txx, Ws, p2 + 1, Trows, Tcols)
         end
     end
     # strong stability test, i.e. is Wl1 Ql1 Txxl Ql' Wl' ≈ Tl?
     for l in 1:k
-        l1 = l == k ? 1 : l + 1
+        l1 = mod(l, k) + 1
         Tl = l == 1 ? T1 : Ts[l - 1]
         if fillin
             Ttmp = Ws[l1] * Txx[l] * Ws[l]'
@@ -179,6 +141,40 @@ function _swapadjqr!(T1::AbstractMatrix{T}, Ts, Zs, i1, p1, p2; sylcheck = false
         triu!(view(Tl, i1:i3, i1:i3))
     end
     return ok
+end
+
+function _filled2hess!(Txx,Ws,j0,Trows,Tcols,S=nothing)
+    k = length(Txx)
+    j1 = j0 + 1
+    Th = [Txx[l][j0:j1, j0:j1] for l in 1:k]
+    notinverted(l) = (S === nothing) ? true : S[l]
+    H11, H1qs = _phess2x2!(Th,1,S)
+    for l in 1:k
+        lp = mod(l, k) + 1
+        q = H1qs[l]
+        qp = H1qs[lp]
+        Tl = Txx[l]
+        if notinverted(l)
+            # rmul!(view(Tl, :, j0:j1), q)
+            v = view(Tl, :, j0:j1)
+            Tcols .= v
+            mul!(v, Tcols, q)
+            v = view(Tl, j0:j1, :)
+            Trows .= v
+            mul!(v, qp', Trows)
+        else
+            # lmul!(q', view(Tl, j0:j1, :))
+            v = view(Tl, j0:j1, :)
+            Trows .= v
+            mul!(v, q', Trows)
+            v = view(Tl, :, j0:j1)
+            Tcols .= v
+            mul!(v, Tcols, qp)
+        end
+        v = view(Ws[l], :, j0:j1)
+        Tcols .= v
+        mul!(v, Tcols, q)
+    end
 end
 
 # left ordering, circ-shifted so T1 is rightmost
