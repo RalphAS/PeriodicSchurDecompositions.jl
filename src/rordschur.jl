@@ -1,5 +1,4 @@
 # top-level reordering routines for real periodic schur
-const _rord_verby = Ref(0)
 
 function LinearAlgebra.ordschur!(P::AbstractPeriodicSchur{T}, select::AbstractVector{Bool};
                                  wantZ = true, Z = nothing) where {T <: Real}

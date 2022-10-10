@@ -42,7 +42,9 @@ end
 """
     _rev_alias(P::AbstractPeriodicSchur) -> P_new
 
-reverse the orientation, aliasing the content
+Create a new decomposition structure with reversed orientation,
+aliasing the matrix content.
+Warning: does not alias eigenvalue vectors.
 """
 function _rev_alias(P::GeneralizedPeriodicSchur)
     #P.schurindex == 1 || throw(ArgumentError("only implemented for schurindex=1"))

@@ -1,13 +1,34 @@
-# verbosity values: 0 - silent, 1 - steps, 2 - convergence info, 3 - various matrices
+# diagnostic stuff for PeriodicSchurDecompositions
+
+# `verbosity` applies to the main periodic QZ codes.
+# values: 0 - silent, 1 - steps, 2 - convergence info, 3 - various matrices
 const verbosity = Ref(0)
 
 # Diagnosing the Krylov-Schur code is a special adventure, so we handle it separately.
 const _kry_verby = Ref(0)
 
-setverbosity(j) = verbosity[] = j
+# likewise the swapping codes
+const _ss_verby = Ref(0)
+const _rord_verby = Ref(0)
 
 # Styling is sometimes awkward so make it optional.
 const _dgn_styled = Ref(true)
+
+function setverbosity(j, key = nothing)
+    if key === nothing
+        verbosity[] = j
+    elseif startswith(String(key), "kry")
+        _kry_verby[] = j
+    elseif startswith(String(key), "rord")
+        _rord_verby[] = j
+    elseif startswith(String(key), "syl")
+        _ss_verby[] = j
+    elseif startswith(String(key), "sty")
+        _dgn_styled[] = j != 0
+    else
+        @warn "incomprehensible key $key"
+    end
+end
 
 _printsty(c, xs...) =
     if _dgn_styled[]
@@ -16,9 +37,11 @@ _printsty(c, xs...) =
         print(xs...)
     end
 
-# This is a debugging facility for use inside the pschur(Hessenberg) codes.
-# We verify the transformation chains as we go, to hunt for
-# translation errors etc.
+# This is a debugging facility for use inside the pschur!(Hessenberg) codes.
+# When debugging is enabled, verify the transformation chains as we go, to hunt
+# for translation errors etc.
+# Note that this implementation assumes rightward orientation, as used in
+# the codes operating on periodic Hessenberg series.
 struct _FacChecker{TM}
     A1init::TM
     Aπinit::TM

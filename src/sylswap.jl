@@ -4,8 +4,6 @@
 # @inbounds
 # StaticArrays
 
-const _ss_verby = Ref(0)
-
 # this is for left ordering: we are following Granat's papers
 function _swapadjqr!(T1::AbstractMatrix{T}, Ts, Zs, i1, p1, p2; sylcheck = false) where {T}
     tol = T(100)
