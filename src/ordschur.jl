@@ -18,6 +18,7 @@ function LinearAlgebra.ordschur!(P::AbstractPeriodicSchur{T}, select::AbstractVe
 
     # swap routine requires left orientation and schur index 1
     if P.orientation == 'R'
+        Parg = P
         P = _rev_alias(P)
         rev = true
     end
@@ -64,6 +65,9 @@ function LinearAlgebra.ordschur!(P::AbstractPeriodicSchur{T}, select::AbstractVe
     end
     # TODO:
     # _rebalance!(P)
+    if rev
+        P = Parg
+    end
     _updateλ!(P)
     return P
 end
@@ -75,9 +79,14 @@ function _updateλ!(P::GeneralizedPeriodicSchur{T}) where {T <: Complex}
     As = P.T
     n = size(A1, 1)
     for j in 1:n
-        v4ev[1] = A1[j, j]
-        for l in 1:(p - 1)
-            v4ev[l + 1] = As[l][j, j]
+        il = 1
+        for l in 1:p
+            if l == P.schurindex
+                v4ev[l] = A1[j, j]
+            else
+                v4ev[l] = As[il][j, j]
+                il += 1
+            end
         end
         a, b, sc = _safeprod(P, v4ev)
         P.α[j] = a
@@ -109,8 +118,10 @@ function _updateλ!(P::PeriodicSchur{T}) where {T <: Complex}
         P.values[j] = a / b * T(2 * one(real(T)))^sc
     end
 end
-function _updateλ!(P::PeriodicSchur{T}) where {T <: Real}
+
+function _updateλ!(P::PeriodicSchur{T}; strict = true) where {T <: Real}
     p = length(P.T) + 1
+    sdtol = strict ? 0 : 100 * eps(T)
     v4ev = zeros(complex(T), p)
     A1 = P.T1
     As = P.T
@@ -130,7 +141,7 @@ function _updateλ!(P::PeriodicSchur{T}) where {T <: Real}
                 Al = As[il]
             end
             v4ev[l] = Al[j, j]
-            if j < n && abs(Al[j + 1, j]) > 100 * eps(real(T))
+            if j < n && abs(Al[j + 1, j]) > sdtol
                 if P.schurindex == l
                     pairflag = true
                 else

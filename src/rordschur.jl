@@ -10,6 +10,7 @@ function LinearAlgebra.ordschur!(P::AbstractPeriodicSchur{T}, select::AbstractVe
 
     # swap routine requires left orientation and schur index 1
     if P.orientation == 'R'
+        Parg = P
         P = _rev_alias(P)
         rev = true
     end
@@ -104,6 +105,9 @@ function LinearAlgebra.ordschur!(P::AbstractPeriodicSchur{T}, select::AbstractVe
                 jdest += 1
             end
         end
+    end
+    if rev
+        P = Parg
     end
     # TODO:
     # _rebalance!(P)
