@@ -531,7 +531,11 @@ function _partial_pschur!(As,
         Qtw = [Matrix{T}(I, nk, nk) for _ in 1:p]
         H1 = UpperHessenberg(Hs[p][active:kmax, active:kmax])
         # it is simplest (but confusing) to call the 'R' (non-reversed) version of pschur!
-        Hx = [triu(Hs[p - l][active:kmax, active:kmax]) for l in 1:(p - 1)]
+        if p == 1
+            Hx = similar(Hs,0)
+        else
+            Hx = [triu(Hs[p - l][active:kmax, active:kmax]) for l in 1:(p - 1)]
+        end
         if T <: Complex
             gps = pschur!(H1, Hx, Q = Qtw)
             PS = PeriodicSchur(gps.T1,
@@ -811,7 +815,7 @@ function _compute_ritz_resids!(ritz,
 
         # fallback needs this
         # CHECKME: maybe only compute if needed
-        Qpcur = PS.Z[2]
+        Qpcur = PS.Z[p == 1 ? 1 : 2]
         curfoot = similar(Hpfoot)
         mul!(curfoot, Hpfoot, Qpcur)
 

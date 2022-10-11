@@ -4,9 +4,14 @@
 # @inbounds
 # StaticArrays
 
+if !isfile(joinpath(@__DIR__, "debugging.jl"))
+    macro _dbg_sylswap(expr)
+        nothing
+    end
+end
+
 # this is for left ordering: we are following Granat's papers
-function _swapadjqr!(T1::AbstractMatrix{T}, Ts, Zs, i1, p1, p2; sylcheck = false
-                     ) where {T}
+function _swapadjqr!(T1::AbstractMatrix{T}, Ts, Zs, i1, p1, p2) where {T}
     tol = T(100)
     vb = _ss_verby[]
     i2 = i1 + p1
@@ -29,7 +34,7 @@ function _swapadjqr!(T1::AbstractMatrix{T}, Ts, Zs, i1, p1, p2; sylcheck = false
     Xv, scale = _psylsolve(T11, T22, T12)
     thresh = max(floatmin(real(T)), tol * eps(real(T)) * tnrm)
 
-    if sylcheck
+    @_dbg_sylswap if vb > 1
         X1 = reshape(Xv[1:pp], p1, p2)
         X2 = reshape(Xv[(pp + 1):(2 * pp)], p1, p2)
         Xk = reshape(Xv[((k - 1) * pp + 1):(k * pp)], p1, p2)
@@ -119,7 +124,7 @@ function _swapadjqr!(T1::AbstractMatrix{T}, Ts, Zs, i1, p1, p2; sylcheck = false
     for l in 1:k
         i0 = (l - 1) * pp
         Tl = l == 1 ? T1 : Ts[l - 1]
-        Tp = l == 2 ? T1 : (l == 1 ? Ts[k - 1] : Ts[l - 2])
+        Tp = (l == 2 || k == 1) ? T1 : (l == 1 ? Ts[k - 1] : Ts[l - 2])
         Zl = Zs[l]
         q = Qs[l]
         rmul!(view(Tl, :, i1:i3), q)
@@ -253,7 +258,7 @@ function _swapadj1x1g!(T1::AbstractMatrix{T}, Ts, Zs, i1;
     for l in 1:k
         G = Gs[l]
         Tl = l == 1 ? T1 : Ts[l - 1]
-        Tp = l == 2 ? T1 : (l == 1 ? Ts[k - 1] : Ts[l - 2])
+        Tp = (l == 2 || k == 1) ? T1 : (l == 1 ? Ts[k - 1] : Ts[l - 2])
         rmul!(view(Tl, :, i1:(i1 + 1)), G')
         lmul!(G, view(Tp, i1:(i1 + 1), :))
         if Zs !== nothing
@@ -374,7 +379,7 @@ function _swapadj1x1g!(T1::AbstractMatrix{T}, Ts, Zs, S::AbstractVector{Bool}, i
     for l in 1:k
         G = Gs[l]
         Tl = l == 1 ? T1 : Ts[l - 1]
-        Tp = l == 2 ? T1 : (l == 1 ? Ts[k - 1] : Ts[l - 2])
+        Tp = (l == 2 || k == 1) ? T1 : (l == 1 ? Ts[k - 1] : Ts[l - 2])
         if S[l]
             rmul!(view(Tl, :, i1:(i1 + 1)), G')
         else

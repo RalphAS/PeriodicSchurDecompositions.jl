@@ -178,6 +178,9 @@ function _updateλ!(P::PeriodicSchur{T}; strict = true) where {T <: Real}
                     end
                 end
             end
+            if p == 1
+                xAs = Vector{Matrix{T}}(undef, 0)
+            end
             α, β, scal, cvg, good = _rpeigvals2x2(xA1, xAs, xS, xAord, 1)
             if !cvg
                 @warn "recomputation of eigvals did not converge; accuracy is suspect"
