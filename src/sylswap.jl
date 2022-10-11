@@ -268,3 +268,132 @@ function _swapadj1x1g!(T1::AbstractMatrix{T}, Ts, Zs, i1;
     end
     return ok
 end
+
+# generalized version
+function _swapadj1x1g!(T1::AbstractMatrix{T}, Ts, Zs, S::AbstractVector{Bool}, i1;
+                       strong = true, threshfac = 20) where {T}
+    verbosity = _ss_verby[]
+    verbosity > 1 && println("swapping 1,1 at $i1 via gSyl/Givens")
+    ok = true
+    i2 = i1 + 1
+    i3 = i2 + 1
+    T11 = [T1[i1, i1]]
+    T12 = [T1[i1, i2]]
+    T22 = [T1[i2, i2]]
+    k = length(Ts) + 1
+    for l in 2:k
+        Tl = Ts[l - 1]
+        push!(T11, Tl[i1, i1])
+        push!(T12, Tl[i1, i2])
+        push!(T22, Tl[i2, i2])
+    end
+    # CHECKME: maybe use scaled SSQ as in LAPACK instead of norm()
+    thresh = max(threshfac * hypot(norm(T11), norm(T12), norm(T22)) * eps(real(T)),
+                 floatmin(real(T)))
+    Xv, scale = _pgsylsolve1(T11, T22, T12, S)
+    # use a working copy to facilitate stability tests
+    Txx = [[T11[l] T12[l]; zero(T) T22[l]] for l in 1:k]
+    c, s, r = givensAlgorithm(Xv[1], one(T))
+    G = Givens(1, 2, c, s)
+    Gs = [G]
+    rmul!(Txx[1], G')
+    if S[k]
+        lmul!(G, Txx[k])
+    else
+        rmul!(Txx[k], G')
+    end
+    for l in 2:k
+        if S[l]
+            c, s, r = givensAlgorithm(Xv[l], one(T))
+            G = Givens(1, 2, c, s)
+            rmul!(Txx[l], G')
+        else
+            c, s, r = givensAlgorithm(-Xv[l], one(T))
+            G = Givens(2, 1, c, s')
+            lmul!(G, Txx[l])
+        end
+        lp = l == 1 ? k : l - 1
+        if S[lp]
+            lmul!(G, Txx[lp])
+        else
+            rmul!(Txx[lp], G')
+        end
+        push!(Gs, G)
+    end
+    if verbosity > 2
+        for l in 2:k
+            println("trial T[$l]:"); display(Txx[l]); println()
+        end
+    end
+    ws = sum((l) -> abs(Txx[l][2, 1]), 1:k)
+    if ws > thresh
+        if verbosity > 0
+            @warn "failing weak test for swap at $i1:$i2 ws=$ws vs $thresh"
+        end
+        ok = false
+    elseif verbosity > 1
+        @info "weak test for swap at $i1:$i2 $ws <= $thresh"
+    end
+    if strong
+        # TODO: just apply Gs directly
+        Ws = [Matrix{T}(I, 2, 2) for _ in 1:k]
+        for l in 1:k
+            rmul!(Ws[l], Gs[l]')
+        end
+        for l in 1:k
+            l1 = l == k ? 1 : l + 1
+            if S[l]
+                Txx[l] = Ws[l1] * Txx[l] * Ws[l]'
+            else
+                Txx[l] = Ws[l] * Txx[l] * Ws[l1]'
+            end
+        end
+        if verbosity > 2
+            println("remade T1:"); display(Txx[1]); println()
+            println("orig T1:"); display(T1[i1:i2,i1:i2]); println()
+        end
+        ss = norm(Txx[1] - view(T1, i1:i2, i1:i2))
+        for l in 2:k
+            if verbosity > 2
+                println("remade T[$l]:"); display(Txx[l]); println()
+                println("orig T[$l]:"); display(Ts[l-1][i1:i2,i1:i2]); println()
+            end
+            ss = hypot(ss, norm(Txx[l] - view(Ts[l - 1], i1:i2, i1:i2)))
+        end
+        if ss > thresh
+            if verbosity > 0
+                @warn "failing strong test for swap at $i1:$i2 $ss > $thresh"
+            end
+            ok = false
+        else
+            if verbosity > 1
+                @info "strong test for swap at $i1:$i2 $ss <= $thresh"
+            end
+        end
+    end
+    for l in 1:k
+        G = Gs[l]
+        Tl = l == 1 ? T1 : Ts[l - 1]
+        Tp = l == 2 ? T1 : (l == 1 ? Ts[k - 1] : Ts[l - 2])
+        if S[l]
+            rmul!(view(Tl, :, i1:(i1 + 1)), G')
+        else
+            lmul!(G, view(Tl, i1:(i1 + 1), :))
+        end
+        if S[l == 1 ? k : (l-1)]
+            lmul!(G, view(Tp, i1:(i1 + 1), :))
+        else
+            rmul!(view(Tp, :, i1:(i1 + 1)), G')
+        end
+        if Zs !== nothing
+            Zl = Zs[l]
+            rmul!(view(Zl, :, i1:(i1 + 1)), G')
+        end
+    end
+    # some upstream tests require zero subdiags
+    T1[i1 + 1, i1] = 0
+    for l in 1:(k - 1)
+        Ts[l][i1 + 1, i1] = 0
+    end
+    return ok
+end

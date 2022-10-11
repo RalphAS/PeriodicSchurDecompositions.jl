@@ -210,10 +210,7 @@ function _swapschur1!(P::GeneralizedPeriodicSchur, i1, wantZ, Q)
     if P.orientation != 'L' || P.schurindex != 1
         throw(ArgumentError("only implemented for left orientation w/ schurindex=1"))
     end
-    if !all(P.S)
-        throw(NotImplemented("generalized swap"))
-    end
-    _swapadj1x1g!(P.T1, P.T, wantZ ? Q : nothing, i1)
+    _swapadj1x1g!(P.T1, P.T, wantZ ? Q : nothing, P.S, i1)
 end
 
 include("rordschur.jl")

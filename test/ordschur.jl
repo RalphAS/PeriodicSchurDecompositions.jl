@@ -133,3 +133,63 @@ for T in [Float64]
         end
     end
 end
+
+for T in [Complex{Float64}] # [Float64, Complex{Float64}]
+    @testset "gen. ordschur $T: distinct real" begin
+        p = 5
+        n = 7
+        S = trues(p)
+        for l in 1:2:p-1
+            S[l] = false
+        end
+        # try to avoid serious non-normality
+        A = [0.01 * triu!(rand(T,n,n)) for _ in 1:p]
+        for j in 1:n
+            μ = 2.0^(2*j/p)
+            for l in 1:p
+                A[l][j,j] = S[l] ? μ : (1 / μ)
+            end
+        end
+        for l in 1:p
+            q,_ = qr(randn(T,n,n))
+            Atmp = S[l] ? (q*A[l]) : (A[l]*q')
+            copyto!(A[l],Atmp)
+            l1 = mod(l,p)+1
+            Atmp = S[l1] ? (A[l1]*q') : (q*A[l1])
+            copyto!(A[l1],Atmp)
+        end
+        Awrk = deepcopy(A)
+        ps0 = pschur!(Awrk, S, :L)
+        λ0s = ps0.values
+        nsel = 2
+        @testset "smallest" begin
+            idx = sortperm(λ0s, by=abs)
+            select = falses(n)
+            select[idx[1:nsel]] .= true
+            ps1 = deepcopy(ps0)
+            ps1 = ordschur!(ps1, select)
+            gpschur_check(A, S, ps1)
+            λ1sel = ps1.values[1:nsel]
+            for j in 1:nsel
+                λ0 = λ0s[idx[j]]
+                # println("checking $λ0")
+                @test any(λ1sel .≈ λ0)
+            end
+        end
+        @testset "largest" begin
+            idx = sortperm(λ0s, by=abs, rev=true)
+            select = falses(n)
+            select[idx[1:nsel]] .= true
+            ps1 = deepcopy(ps0)
+            ps1 = ordschur!(ps1, select)
+            gpschur_check(A, S, ps1)
+            λ1sel = ps1.values[1:nsel]
+            for j in 1:nsel
+                λ0 = λ0s[idx[j]]
+                # println("checking $λ0")
+                @test any(λ1sel .≈ λ0)
+            end
+        end
+    end
+end
+
