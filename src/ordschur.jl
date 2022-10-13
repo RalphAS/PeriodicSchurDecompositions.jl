@@ -202,6 +202,116 @@ function _updateλ!(P::PeriodicSchur{T}; strict = true) where {T <: Real}
     end
 end
 
+function _updateλ!(P::GeneralizedPeriodicSchur{T};
+                   strict = true) where {T <: Real}
+    p = length(P.T) + 1
+    v4ev = zeros(complex(T), p)
+    sdtol = strict ? 0 : 100 * eps(T)
+    A1 = P.T1
+    As = P.T
+    n = size(A1, 1)
+    si = P.schurindex
+    xAord = 1:p # we will rearrange here
+
+    # need to make xS consistent w/ reordering below
+    xS = copy(P.S)
+    if P.orientation == 'L'
+        if si in (1, p)
+            reverse!(xS)
+        else
+            xS[1] = P.S[si]
+            il = 1
+            for l in (si - 1):-1:1
+                il += 1
+                xS[il] = P.S[l]
+            end
+            for l in (p - 1):-1:si
+                il += 1
+                xS[il] = P.S[l]
+            end
+        end
+    elseif !(si in (1, p)) # right
+        xS[1] = P.S[si]
+        il = 1
+        for l in si:(p - 1)
+            il += 1
+            xS[il] = P.S[l]
+        end
+        for l in 1:(si - 1)
+            il += 1
+            xS[il] = P.S[l]
+        end
+    end
+
+    j = 1
+    pairflag = false
+    while j <= n
+        il = 0
+        for l in 1:p
+            if l == si
+                Al = A1
+            else
+                il += 1
+                Al = As[il]
+            end
+            v4ev[l] = Al[j, j]
+            if j < n && abs(Al[j + 1, j]) > sdtol
+                if l == si
+                    pairflag = true
+                else
+                    @error "unexpected subdiag in triang factor $l at $j: $(Al[j+1,j])"
+                end
+            end
+        end
+        if pairflag
+            xA1 = view(A1, j:(j + 1), j:(j + 1))
+            if P.orientation == 'L'
+                if si in (1, p)
+                    # simply reverse
+                    xAs = [view(As[p - l], j:(j + 1), j:(j + 1)) for l in 1:(p - 1)]
+                else
+                    xAs = [view(As[si - 1], j:(j + 1), j:(j + 1))]
+                    for l in (si - 2):-1:1
+                        push!(xAs, view(As[l], j:(j + 1), j:(j + 1)))
+                    end
+                    for l in (p - 1):-1:si
+                        push!(xAs, view(As[l], j:(j + 1), j:(j + 1)))
+                    end
+                end
+            else
+                if si in (1, p)
+                    xAs = [view(As[l], j:(j + 1), j:(j + 1)) for l in 1:(p - 1)]
+                else
+                    xAs = [view(As[si], j:(j + 1), j:(j + 1))]
+                    for l in (si + 1):(p - 1)
+                        push!(xAs, view(As[l], j:(j + 1), j:(j + 1)))
+                    end
+                    for l in 1:(si - 1)
+                        push!(xAs, view(As[l], j:(j + 1), j:(j + 1)))
+                    end
+                end
+            end
+            α, β, scal, cvg, good = _rpeigvals2x2(xA1, xAs, xS, xAord, 1)
+            if !cvg
+                @warn "recomputation of eigvals did not converge; accuracy is suspect"
+            elseif !good
+                @warn "recomputation of eigvals deviates from reality; accuracy is suspect"
+            end
+            P.α[j:j + 1] .= α
+            P.β[j:j+1] .= β
+            P.αscale[j:j+1] .= scal
+            j += 2
+            pairflag = false
+        else
+            a, b, sc = _safeprod(P, v4ev)
+            P.α[j] = a
+            P.β[j] = b
+            P.αscale[j] = sc
+            j += 1
+        end
+    end
+end
+
 # swap 1×1 blocks at `i1:i1+1`
 function _swapschur1!(P::PeriodicSchur, i1, wantZ, Q)
     if P.orientation != 'L' || P.schurindex != 1

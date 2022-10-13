@@ -56,8 +56,9 @@ end
 """
 construct a periodic real Schur decomposition (left orientation, quasi-tri at left end)
 with conjugate eigvals in locations specified by jcs
+(if `alt`, generalize w/alternating signatures; eigval order will probably be lost)
 """
-function mkrps(n,p,jcs,T=Float64; tri=false, check=false, nnfac=1e-2)
+function mkrps(n,p,jcs,T=Float64; tri=false, check=false, nnfac=1e-2, alt=false)
     T1 = triu!(nnfac * rand(T,n,n))
     Ts = [nnfac * triu!(rand(T,n,n)) for _ in 1:p-1]
     jj = 0
@@ -95,8 +96,21 @@ function mkrps(n,p,jcs,T=Float64; tri=false, check=false, nnfac=1e-2)
     end
     As = [Zs[l+1]*Ts[l]*Zs[l]' for l in 1:p-1]
     push!(As, Zs[1]*T1*Zs[p]')
-    ps = PeriodicSchur(T1,Ts,Zs,λs,'L',p)
-    check && pschur_check(As, ps)
+    if alt
+        S = trues(p)
+        for l in 1:2:p-1
+            S[l] = false
+            Ts[l] = inv(Ts[l])
+            As[l] = Zs[l]*Ts[l]*Zs[l+1]'
+        end
+        #ps = GeneralizedPeriodicSchur(S,p,T1,Ts,Zs,λs,ones(T,n),zeros(Int,n),'L')
+        ps = pschur(As,S,:L)
+        check && gpschur_check(As, S, ps)
+    else
+        ps = PeriodicSchur(T1,Ts,Zs,λs,'L',p)
+        check && pschur_check(As, ps)
+    end
+    check && println("test ps is ready")
     return ps,As
 end
 
@@ -134,7 +148,7 @@ for T in [Float64]
     end
 end
 
-for T in [Complex{Float64}] # [Float64, Complex{Float64}]
+for T in [Float64, Complex{Float64}]
     @testset "gen. ordschur $T: distinct real" begin
         p = 5
         n = 7
@@ -193,3 +207,47 @@ for T in [Complex{Float64}] # [Float64, Complex{Float64}]
     end
 end
 
+for T in [Float64]
+    @testset "gen. ordschur $T: conjugate pair(s)" begin
+        p = 5
+        n = 7
+        jcs = [3,6]
+        ps0, A = mkrps(n,p,jcs,T; tri=false, alt=true, check=true)
+        @show (ps0.orientation, ps0.schurindex, ps0.S)
+        λ0s = ps0.values # [a,b,z,z',c,w,w']
+        println("initial vals:"); display(λ0s); println()
+        t = isreal.(λ0s)
+        ir1 = findfirst(t)
+        ir2 = findlast(t)
+        t .= (!).(t)
+        ic1 = findfirst(t)
+        ic2 = findlast(t) - 1
+        prs = [([ic2,ic2+1],"ℂ,ℂ")]
+        if ir1 > ic1
+            push!(prs, ([ir1],"ℂ,ℝ"))
+        else
+            push!(prs, ([ic1,ic1+1],"ℝ,ℂ"))
+        end
+        @show prs
+        for (selset, str) in prs
+            @testset "$str" begin
+                select = falses(n)
+                nsel = length(selset)
+                select[selset] .= true
+                ps1 = deepcopy(ps0)
+                ps1 = ordschur!(ps1, select)
+                gpschur_check(A, ps0.S, ps1)
+                # println("T1:"); display(ps1.T1); println()
+                # NOTE: the following logic needs elaboration to test cases
+                # where user is too sloppy to select conjugates
+                λ1sel = ps1.values[1:nsel]
+                 println("$str expected,got:"); display(hcat(λ0s[selset],λ1sel)); println()
+                for j in 1:nsel
+                   λ0 = λ0s[selset[j]]
+                    # println("checking $λ0")
+                   @test any(λ1sel .≈ λ0)
+                end
+            end
+        end
+    end
+end

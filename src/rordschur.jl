@@ -249,11 +249,19 @@ function _moveblock!(P, jsrc, jdest, wantZ, Q)
     return jsrc, jdest, ok
 end
 
-function _swapschur!(P, i1, nb1, nb2, Q)
+function _swapschur!(P::PeriodicSchur, i1, nb1, nb2, Q)
     if (nb1 == 1) && (nb2 == 1)
         ok = _swapschur1!(P, i1, Q !== nothing, Q)
     else
         ok = _swapadjqr!(P.T1, P.T, Q, i1, nb1, nb2)
+    end
+    return ok
+end
+function _swapschur!(P::GeneralizedPeriodicSchur, i1, nb1, nb2, Q)
+    if (nb1 == 1) && (nb2 == 1)
+        ok = _swapschur1!(P, i1, Q !== nothing, Q)
+    else
+        ok = _swapadjqr!(P.T1, P.T, Q, P.S, i1, nb1, nb2)
     end
     return ok
 end
