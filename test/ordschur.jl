@@ -1,6 +1,6 @@
 for T in [Float64, Complex{Float64}]
-    @testset "ordschur $T: distinct real" begin
-        p = 5
+  for p in [5,1]
+    @testset "ordschur $T: distinct real, p=$p" begin
         n = 7
         # try to avoid serious non-normality
         A = [0.01 * triu!(rand(T,n,n)) for _ in 1:p]
@@ -28,7 +28,7 @@ for T in [Float64, Complex{Float64}]
             select[idx[1:nsel]] .= true
             ps1 = deepcopy(ps0)
             ps1 = ordschur!(ps1, select)
-            pschur_check(A, ps1; checkλ = false)
+            pschur_check(A, ps1; checkλ = false, tol = (p == 1) ? 20000 : 32)
             λ1sel = ps1.values[1:nsel]
             for j in 1:nsel
                 λ0 = λ0s[idx[j]]
@@ -42,7 +42,7 @@ for T in [Float64, Complex{Float64}]
             select[idx[1:nsel]] .= true
             ps1 = deepcopy(ps0)
             ps1 = ordschur!(ps1, select)
-            pschur_check(A, ps1; checkλ = false)
+            pschur_check(A, ps1; checkλ = false, tol = (p == 1) ? 20000 : 32)
             λ1sel = ps1.values[1:nsel]
             for j in 1:nsel
                 λ0 = λ0s[idx[j]]
@@ -51,6 +51,7 @@ for T in [Float64, Complex{Float64}]
             end
         end
     end
+  end
 end
 
 """
@@ -60,7 +61,11 @@ with conjugate eigvals in locations specified by jcs
 """
 function mkrps(n,p,jcs,T=Float64; tri=false, check=false, nnfac=1e-2, alt=false)
     T1 = triu!(nnfac * rand(T,n,n))
-    Ts = [nnfac * triu!(rand(T,n,n)) for _ in 1:p-1]
+    if p > 1
+        Ts = [nnfac * triu!(rand(T,n,n)) for _ in 1:p-1]
+    else
+        Ts = Vector{Matrix{T}}(undef, 0)
+    end
     jj = 0
     λs = Vector{complex(T)}(undef,n)
     local μ
@@ -79,8 +84,8 @@ function mkrps(n,p,jcs,T=Float64; tri=false, check=false, nnfac=1e-2, alt=false)
             μ = 2.0^(2*jj/p)
             λs[j] = 2.0^(2*jj)
         end
+        T1[j,j] = μ
         for l in 1:p-1
-            T1[j,j] = μ
             Ts[l][j,j] = μ
         end
     end
@@ -94,8 +99,12 @@ function mkrps(n,p,jcs,T=Float64; tri=false, check=false, nnfac=1e-2, alt=false)
             push!(Zs,Matrix(q))
         end
     end
-    As = [Zs[l+1]*Ts[l]*Zs[l]' for l in 1:p-1]
-    push!(As, Zs[1]*T1*Zs[p]')
+    if p > 1
+        As = [Zs[l+1]*Ts[l]*Zs[l]' for l in 1:p-1]
+        push!(As, Zs[1]*T1*Zs[p]')
+    else
+        As = [Zs[1]*T1*Zs[p]']
+    end
     if alt
         S = trues(p)
         for l in 1:2:p-1
@@ -103,9 +112,10 @@ function mkrps(n,p,jcs,T=Float64; tri=false, check=false, nnfac=1e-2, alt=false)
             Ts[l] = inv(Ts[l])
             As[l] = Zs[l]*Ts[l]*Zs[l+1]'
         end
-        #ps = GeneralizedPeriodicSchur(S,p,T1,Ts,Zs,λs,ones(T,n),zeros(Int,n),'L')
-        ps = pschur(As,S,:L)
+        ps = GeneralizedPeriodicSchur(S,p,T1,Ts,Zs,λs,ones(T,n),zeros(Int,n),'L')
+        #ps = pschur(As,S,:L)
         check && gpschur_check(As, S, ps)
+        # gpschur_check(As, S, ps)
     else
         ps = PeriodicSchur(T1,Ts,Zs,λs,'L',p)
         check && pschur_check(As, ps)
@@ -115,8 +125,8 @@ function mkrps(n,p,jcs,T=Float64; tri=false, check=false, nnfac=1e-2, alt=false)
 end
 
 for T in [Float64]
-    @testset "ordschur $T: conjugate pair(s)" begin
-        p = 5
+  for p in [5,1]
+    @testset "ordschur $T: conjugate pair(s), p=$p" begin
         n = 7
         jcs = [3,6]
         ps0, A = mkrps(n,p,jcs,T; tri=false)
@@ -132,8 +142,12 @@ for T in [Float64]
                 select[selset] .= true
                 ps1 = deepcopy(ps0)
                 ps1 = ordschur!(ps1, select)
-                pschur_check(A, ps1; checkλ = false)
+                pschur_check(A, ps1; checkλ = false, tol = (p == 1) ? 20000 : 32)
                 # println("T1:"); display(ps1.T1); println()
+                if developing
+                    println("λ0 λ1 sel:")
+                    display(hcat(ps0.values,ps1.values,select)); println()
+                end
                 # NOTE: the following logic needs elaboration to test cases
                 # where user is too sloppy to select conjugates
                 λ1sel = ps1.values[1:nsel]
@@ -146,6 +160,7 @@ for T in [Float64]
             end
         end
     end
+  end
 end
 
 for T in [Float64, Complex{Float64}]
@@ -213,9 +228,12 @@ for T in [Float64]
         n = 7
         jcs = [3,6]
         ps0, A = mkrps(n,p,jcs,T; tri=false, alt=true, check=true)
-        @show (ps0.orientation, ps0.schurindex, ps0.S)
-        λ0s = ps0.values # [a,b,z,z',c,w,w']
-        println("initial vals:"); display(λ0s); println()
+        # @show (ps0.orientation, ps0.schurindex, ps0.S)
+        # when we're sure we get [a,b,z,z',c,w,w'] we can copy from std case
+        λ0s = ps0.values
+        if developing
+            println("initial vals:"); display(λ0s); println()
+        end
         t = isreal.(λ0s)
         ir1 = findfirst(t)
         ir2 = findlast(t)
@@ -228,7 +246,9 @@ for T in [Float64]
         else
             push!(prs, ([ic1,ic1+1],"ℝ,ℂ"))
         end
-        @show prs
+        if developing
+            @show prs
+        end
         for (selset, str) in prs
             @testset "$str" begin
                 select = falses(n)
@@ -241,7 +261,7 @@ for T in [Float64]
                 # NOTE: the following logic needs elaboration to test cases
                 # where user is too sloppy to select conjugates
                 λ1sel = ps1.values[1:nsel]
-                 println("$str expected,got:"); display(hcat(λ0s[selset],λ1sel)); println()
+                # println("$str expected,got:"); display(hcat(λ0s[selset],λ1sel)); println()
                 for j in 1:nsel
                    λ0 = λ0s[selset[j]]
                     # println("checking $λ0")

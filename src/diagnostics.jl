@@ -40,32 +40,64 @@ _printsty(c, xs...) =
 # This is a debugging facility for use inside the pschur!(Hessenberg) codes.
 # When debugging is enabled, verify the transformation chains as we go, to hunt
 # for translation errors etc.
-# Note that this implementation assumes rightward orientation, as used in
-# the codes operating on periodic Hessenberg series.
+# Note that this implementation assumes nontrivial initial `Z`, since
+# primarily used in the codes operating on periodic Hessenberg series.
 struct _FacChecker{TM}
     A1init::TM
     Aπinit::TM
     p::Int
     valid::Bool
+    left::Bool
+    ischur::Int
 end
 
-function _FacChecker(H1, Hs, Z, wantZ, S=nothing)
+function _FacChecker(H1, Hs, Z, wantZ, S=nothing; left=false, ischur=1)
     sx(l) = S === nothing ? true : S[l]
     if !wantZ
         _printsty(:cyan, "H1, ΠH checks not available w/o Z")
-        return _FacChecker(1,1,1,false)
+        return _FacChecker(1,1,1,false,false,1)
+    end
+    if !sx(1)
+        _printsty(:cyan, "H1, ΠH checks not available for !S[1]")
+        return _FacChecker(1,1,1,false,false,1)
     end
     p = length(Hs) + 1
-    A1init = Z[1] * H1 * Z[p > 1 ? 2 : 1]'
-    Aπinit = Z[1] * H1;
+    A1 = (ischur == 1) ? H1 : Hs[1]
+    if left
+        A1init = Z[p > 1 ? 2 : 1] * A1 * Z[1]'
+        Aπinit = A1 * Z[1]';
+    else
+        A1init = Z[1] * H1 * Z[p > 1 ? 2 : 1]'
+        Aπinit = Z[1] * H1;
+    end
+
+    il = (ischur == 1) ? 0 : 1
     for l in 2:p
-        if sx(l)
-            Aπinit = Aπinit * Hs[l-1]
+        if l == ischur
+            Hl = H1
         else
-            Aπinit = Aπinit * inv(Hs[l-1])
+            il += 1
+            Hl = Hs[il]
+        end
+        if left
+            if sx(l)
+                Aπinit = Hl * Aπinit
+            else
+                Aπinit = inv(Hl) * Aπinit
+            end
+        else
+            if sx(l)
+                Aπinit = Aπinit * Hl
+            else
+                Aπinit = Aπinit * inv(Hl)
+            end
         end
     end
-    Aπinit = Aπinit * Z[1]'
+    if left
+        Aπinit = Z[1] * Aπinit
+    else
+        Aπinit = Aπinit * Z[1]'
+    end
     if _dbg_detail[] > 0
         print("A1 (initial):")
         show(stdout, "text/plain",  A1init)
@@ -74,28 +106,53 @@ function _FacChecker(H1, Hs, Z, wantZ, S=nothing)
         show(stdout, "text/plain",  Aπinit)
         println()
     end
-    return _FacChecker(A1init, Aπinit, p, true)
+    return _FacChecker(A1init, Aπinit, p, true, left, ischur)
 end
 
 function (fc::_FacChecker)(str, H1, Hs, Z, S = nothing;
-                           check_Aπ = true, check_A1 = false)
+                           check_Aπ = true, check_A1 = false, pd=nothing)
     fc.valid || return nothing
     sx(l) = S === nothing ? true : S[l]
     if check_A1
-        A1tmp = Z[1] * H1 * Z[fc.p > 1 ? 2 : 1]'
-        println(str, " H1 factor error: ", norm(A1tmp - fc.A1init))
+        if fc.left
+            A1tmp = Z[fc.p > 1 ? 2 : 1] * H1 * Z[1]'
+        else
+            A1tmp = Z[1] * H1 * Z[fc.p > 1 ? 2 : 1]'
+        end
+        t = norm(A1tmp - fc.A1init)
+        println(str, " H1 factor error: ", t, " rel. ", t/norm(fc.A1init))
     end
     if check_Aπ
-        Aπtmp = Z[1] * H1;
+        Hl = (fc.ischur == 1) ? H1 : Hs[1]
+        Aπtmp = Hl
+        il = (fc.ischur == 1) ? 0 : 1
         for l in 2:fc.p
-            if sx(l)
-                Aπtmp = Aπtmp * Hs[l-1]
+            if l == fc.ischur
+                Hl = H1
             else
-                Aπtmp = Aπtmp * inv(Hs[l-1])
+                il += 1
+                Hl = Hs[il]
+            end
+            if fc.left
+                if sx(l)
+                    Aπtmp = Hl * Aπtmp
+                else
+                    Aπtmp = inv(Hl) * Aπtmp
+                end
+            else
+                if sx(l)
+                    Aπtmp = Aπtmp * Hl
+                else
+                    Aπtmp = Aπtmp * inv(Hl)
+                end
             end
         end
-        Aπtmp = Aπtmp * Z[1]'
-        println(str, " ΠH error: ", norm(Aπtmp - fc.Aπinit))
+        if pd !== nothing
+            println("  block at [$(pd-1),$(pd-1)]: ", Aπtmp[pd-1:pd,pd-1:pd])
+        end
+        Aπtmp = Z[1] * Aπtmp * Z[1]'
+        t = norm(Aπtmp - fc.Aπinit)
+        println(str, " ΠH error: ", t, " rel. ", t / norm( fc.Aπinit))
     end
     nothing
 end

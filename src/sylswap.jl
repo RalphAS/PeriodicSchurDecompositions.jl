@@ -12,6 +12,7 @@ end
 
 # this is for left ordering: we are following Granat's papers
 function _swapadjqr!(T1::AbstractMatrix{T}, Ts, Zs, i1, p1, p2) where {T}
+    @_dbg_sylswap fcheck = _FacChecker(T1, Ts, Zs, true; left=true)
     tol = T(100)
     vb = _ss_verby[]
     i2 = i1 + p1
@@ -31,12 +32,18 @@ function _swapadjqr!(T1::AbstractMatrix{T}, Ts, Zs, i1, p1, p2) where {T}
         push!(T12, Tl[i1:(i2 - 1), i2:i3])
         push!(T22, Tl[i2:i3, i2:i3])
     end
-    Xv, scale = _psylsolve(T11, T22, T12)
+    if k == 1
+        Xv = vec(sylvester(T11[1], -T22[1], T12[1]))
+        scale = one(real(T))
+    else
+        Xv, scale = _psylsolve(T11, T22, T12)
+    end
     thresh = max(floatmin(real(T)), tol * eps(real(T)) * tnrm)
 
     @_dbg_sylswap if vb > 1
         X1 = reshape(Xv[1:pp], p1, p2)
-        X2 = reshape(Xv[(pp + 1):(2 * pp)], p1, p2)
+        ioff = (k == 1) ? 0 : pp
+        X2 = reshape(Xv[(ioff + 1):(ioff + pp)], p1, p2)
         Xk = reshape(Xv[((k - 1) * pp + 1):(k * pp)], p1, p2)
         resid = norm(T11[1] * X1 - X2 * T22[1] + T12[1])
         println("psyl residual 1: ", resid)
@@ -145,6 +152,7 @@ function _swapadjqr!(T1::AbstractMatrix{T}, Ts, Zs, i1, p1, p2) where {T}
         Tl = Ts[l]
         triu!(view(Tl, i1:i3, i1:i3))
     end
+    @_dbg_sylswap fcheck("after swap", T1, Ts, Zs)
     return ok
 end
 
@@ -550,10 +558,15 @@ function _swapadj1x1g!(T1::AbstractMatrix{T}, Ts, Zs, i1;
     # CHECKME: maybe use scaled SSQ as in LAPACK instead of norm()
     thresh = max(threshfac * hypot(norm(T11), norm(T12), norm(T22)) * eps(real(T)),
                  floatmin(real(T)))
-    Xv, scale = _psylsolve1(T11, T22, T12)
     # use a working copy to facilitate stability tests
     Txx = [[T11[l] T12[l]; zero(T) T22[l]] for l in 1:k]
-    c, s, r = givensAlgorithm(Xv[1], one(T))
+    if k > 1
+        Xv, scale = _psylsolve1(T11, T22, T12)
+        c, s, r = givensAlgorithm(Xv[1], one(T))
+    else
+        # cf. LAPACK.trexc
+        c, s, r = givensAlgorithm(T12[1], T22[1]-T11[1])
+    end
     G = Givens(1, 2, c, s)
     Gs = [G]
     rmul!(Txx[1], G')
