@@ -2,10 +2,7 @@ module PeriodicSchurDecompositions
 using LinearAlgebra
 
 # Some algorithms are configurable until tests are more comprehensive.
-# SLICOT has some peculiar computations for shifts; alternative is from LAPACK
-const slicot_shifts = Ref(false)
-# SLICOT's convergence criterion is often too lax; alternative is from LAPACK
-const slicot_convg = Ref(false)
+# These are in sections marked ALGO_CONFIG
 
 import LinearAlgebra: lmul!, rmul!
 using LinearAlgebra: checksquare, require_one_based_indexing
@@ -280,10 +277,29 @@ else
     end
 end
 
+# The standard real PQZ for Hessenberg/triangular product
 # Mainly translated from SLICOT routine MB03WD, by V.Sima following A.Varga
 # SLICOT Copyright (c) 2002-2020 NICONET e.V.
+
+# ALGO_CONFIG
+# SLICOT has some peculiar computations for shifts; alternative is based on LAPACK
+const _slicot_shifts = Ref(false)
+# SLICOT's convergence criterion is often too lax; alternative is based on LAPACK
+const _slicot_convg = Ref(false)
+
+# Even the Ahues-Tisseur scheme from LAPACK seems too lax for the periodic case.
+# We shrink the threshold by an empirically-based factor; the relative threshold is
+# effectively ϵ^(1 + _AT_pwr16[] / 16).
+# It should perhaps depend on the period.
+const _AT_pwr16 = Ref(4)
+
+# The RQ iteration for deflation seems to lack a final stage; this can enable it.
+const _extra_rq = Ref(false)
+
 # SLICOT (following LAPACK) allows limiting QR to a lower portion of the system.
 # This is dangerous for some matrices, so it is suppressed by default.
+const _allow_early_QR = Ref(false)
+
 """
     pschur!(H1,Hs) -> PeriodicSchur
 
@@ -301,7 +317,6 @@ function pschur!(H1H::S1,
                  Q = nothing,
                  maxitfac = 30,
                  rev = false,
-                 allow_early_QR = false
                  ) where {S1 <: Union{UpperHessenberg{T}, StridedMatrix{T}},
                                      S <: StridedMatrix{T}} where {T <: Real}
     p = length(Hs) + 1
@@ -339,6 +354,17 @@ function pschur!(H1H::S1,
     unfl = floatmin(T)
     ovfl = 1 / unfl
     ulp = eps(T)
+    ulpx = ulp
+    AT_hi, AT_lo = divrem(_AT_pwr16[], 16)
+    ulpx *= ulp^AT_hi
+    s = ulp
+    for iu in (8,4,2,1)
+        s = sqrt(s)
+        if (AT_lo & iu) != 0
+            ulpx *= s
+        end
+    end
+
     smlnum = unfl * (n / ulp)
 
     s = ulp * n
@@ -414,9 +440,15 @@ function pschur!(H1H::S1,
     local tst1
     if verbosity[] > 0
         print("Real periodic QR p=$p n=$n, ")
-        println((slicot_shifts[] ? "slicot" : "lapack")," shifts, ",
-                (slicot_convg[] ? "slicot" : "lapack"), " convg")
+        println((_slicot_shifts[] ? "slicot" : "lapack")," shifts, ",
+                (_slicot_convg[] ? "slicot" : "lapack"), " convg")
     end
+    verbosity[] > 1 && println("AT criterion power is $(log2(ulpx)/log2(ulp))")
+
+    # maxits and niter are just for reporting
+    maxits = 0 # peak of iter count for all values of `i`
+    niter = 0
+
     while i >= 1
         verbosity[] > 0 && println("starting main loop for block 1:$i")
         # eigvals i+1:n have converged
@@ -428,7 +460,7 @@ function pschur!(H1H::S1,
         l = 1
         its = 1
         while its < maxitleft
-            verbosity[] > 1 && println("QR iteration l=$l i=$i, iter $its")
+            verbosity[] > 1 && _printsty(:cyan, "QR iteration l=$l i=$i, iter $its\n")
             splitting = false
             # initialization: compute ℍ[i,i] (and ℍ[i,i-1] if i > l)
             hp22 = one(T)
@@ -496,7 +528,7 @@ function pschur!(H1H::S1,
                     tst1 = opnorm(view(H1, l:i, l:i), 1)
                 end
 
-                if slicot_convg[]
+                if _slicot_convg[]
                     found = abs(hh21) <= max(ulp*tst1, smlnum)
                 else
                     # LAPACK has smlnum on the right, but that may lead to pointless
@@ -511,16 +543,19 @@ function pschur!(H1H::S1,
                         aa = max(abs(hh22), abs(hh11 - hh22))
                         bb = min(abs(hh22), abs(hh11 - hh22))
                         stmp = aa + ab
-                        found = ba * (ab / stmp) <= max(smlnum, ulp * (bb * (aa / stmp)))
-                        if !found && verbosity[] > 1
+                        found = ba * (ab / stmp) <= max(smlnum, ulpx * (bb * (aa / stmp)))
+                        if verbosity[] > 1
                             t1 = ba * (ab / stmp)
                             t2 = ulp * (bb * (aa / stmp))
-                            println("missed AT criterion hh21=$hh21 vs $(ulp*tst1); $t1 vs. $t2")
+                            println((found ? "met" : "missed")
+                                    * " AT criterion hh21=$hh21 vs. $(ulpx*tst1);"
+                                    * "$t1 vs. $t2")
+                            found || println("prod block ",[hh11 hh12; hh21 hh22])
                         end
                     end
                 end
                 if found
-                    verbosity[] > 1 && println("k=$k hh21=$hh21 hh10=$hh10")
+                    verbosity[] > 1 && println("found tiny hh21=$hh21 hh10=$hh10 at k=$k")
                     break
                 end
                 # update for next cycle
@@ -541,19 +576,20 @@ function pschur!(H1H::S1,
             l = (i > l) ? (found ? klast : l) : i
 
             # each iteration works with active block [l:i,l:i]
-            # either l=1 or ℍ[l,l-1] is negligible
-
+            # either l=1, or ℍ[l,l-1] is negligible
             if l > 1
-                # ℍ[l,l-1] is negligible
                 if wantT
                     # if H₁[l,l-1] is also negligible, zero it;
-                    # otherwise annihilate subdiagonals, then restore Hⱼ to triangular
+                    # otherwise the product of Hⱼ[l-1,l], j in 2:p is negligible, so
+                    # annihilate subdiagonals, then restore Hⱼ to triangular (RQ step)
                     tst1 = abs(H1[l - 1, l - 1]) + abs(H1[l, l])
                     if tst1 == 0
                         tst1 = opnorm(view(H1, l:i, l:i), 1)
                     end
                     if abs(H1[l, l - 1]) > max(ulp * tst1, smlnum)
-                        verbosity[] > 1 && println("processing subdiag $l: $(H1[l, l - 1])")
+                        if verbosity[] > 1
+                            _printsty(:green, "processing subdiag $l: $(H1[l, l - 1])\n")
+                        end
                         for k in i:-1:l
                             for j in 1:(p - 1)
                                 if j == 1
@@ -588,10 +624,35 @@ function pschur!(H1H::S1,
                             end
                             verbosity[] > 2 && showprod("prep k=$k")
                         end # k loop (110)
-                        Hp[l, l - 1] = zero(T)
+
+                        if _extra_rq[]
+                            # this was not in MB03WD
+                            # reflector to annihilate Hₚ[l,l-1]
+                            ξ = [Hp[l, l], Hp[l, l - 1]]
+                            t = _reflector!(ξ)
+                            Hp[l, (l - 1):l] .= (zero(T), ξ[1])
+                            hr = HH2(ξ[2], one(T), t)
+                            rmul!(view(Hp, i1:(l - 1), (l - 1):l), hr)
+                            # apply to H1
+                            lmul!(hr', view(H1, (l - 1):l, (l - 1):i2))
+                            if wantZ
+                                rmul!(view(Z[1], :, (l - 1):l), hr)
+                            end
+                            if verbosity[] > 1
+                                println("after RQ H1[l, l - 1]:", H1[l, l - 1])
+                            end
+                        else
+                            # MB03WD forces to 0, even when wrong
+                            if verbosity[] > 1
+                                println("after RQ Hp[l, l - 1]:", Hp[l, l - 1])
+                            end
+                            Hp[l, l - 1] = zero(T)
+                        end
+                    elseif verbosity[] > 1
+                        println("  already small enough")
                     end # if subdiagonals were annihilated
                     H1[l, l - 1] = zero(T)
-                    @_dbg_rpschur fcheck("after subdiag $l", H1, Hs, Z)
+                    @_dbg_rpschur fcheck("after subdiag $l", H1, Hs, Z, check_Ap=true, check_A1=true)
                 end # if wantT
             end # ℍ[l,l-1] was negligible (l > 1)
             # exit this loop if a submatrix of order 1 or 2 split off
@@ -636,7 +697,7 @@ function pschur!(H1H::S1,
                 h43 = hsubdiag[i]
                 h34 = hsupdiag[n - 1]
 
-                if slicot_shifts[]
+                if _slicot_shifts[]
                     disc = (h33 - h44) * T(0.5)
                     disc = disc * disc + h43h34
                     if disc > 0
@@ -695,7 +756,7 @@ function pschur!(H1H::S1,
 
             # look for two consecutive small subdiagonals and construct bulge reflector
             # Note: Fortran loop has break for M = L so no final decrement
-            mmax = allow_early_QR ? (i - 2) : l
+            mmax = _allow_early_QR[] ? (i - 2) : l
             mlast = mmax # where to start QR
             for m in mmax:-1:l
                 mlast = m
@@ -705,7 +766,7 @@ function pschur!(H1H::S1,
                 h12 = hsupdiag[n - i + m]
                 h21 = hsubdiag[m + 1]
                 h22 = hdiag[m + 1]
-                if slicot_shifts[] || exc_shift
+                if _slicot_shifts[] || exc_shift
                     h44s = h44 - h11
                     h33s = h33 - h11
                     v1 = (h33s * h44s - h43h34) / h21 + h12
@@ -911,43 +972,52 @@ function pschur!(H1H::S1,
                     replaceG = jmax > 0 && hsubdiag[i - 1] == 0
                     # If one eigval is tiny, the rotation from ℍ is also inadequate
                     # These cases are not handled in MB03WD
+                    a1,a2 = abs.(λ[i-1:i])
                     if λ[i] * λ[i-1] == 0
                         replaceG = true
                     elseif hsubdiag[i - 1] == 0
-                        a1,a2 = abs.(λ[i-1:i])
                         # CHECKME: this suffices for cases seen so far, but is not
                         # supported by analysis
                         if min(a1,a2) / max(a1,a2) < eps(T)
                             replaceG = true
                         end
                     end
-                    if replaceG
-                        G, _ = givens(H1[i - 1, i - 1], H1[i, i - 1], 1, 2)
-                        verbosity[] > 1 && println("nontrivial chain, reals")
-                    end
-                    # act on cols/rows i-1:i
-                    lmul!(G, view(H1, (i - 1):i, (i - 1):i2))
-                    rmul!(view(Hp, i1:i, (i - 1):i), G')
-                    # rmul!(view(H1, :, i-1:i2), G')
-                    # lmul!(G, view(H[p], i1:i, :))
-                    if wantZ
-                        rmul!(view(Z[1], :, (i - 1):i), G')
-                    end
-                    for j in p:-1:max(2, jmax + 1)
-                        Hj = Hs[j - 1]
-                        # reflector to annihilate Hⱼ[i,i-1] from the left
-                        v[1:2] .= (Hj[i - 1, i - 1], Hj[i, i - 1])
-                        ξ = view(v, 1:2)
-                        t = _reflector!(ξ)
-                        hr = Householder{T, typeof(ξ)}(view(ξ, 2:2), t)
-                        Hj[(i - 1):i, i - 1] .= (v[1], zero(T))
-                        lmul!(hr', view(Hj, (i - 1):i, i:i2))
-                        # and transform columns of Hⱼ₋₁, Z
-                        Hjm1 = j == 2 ? H1 : Hs[j - 2]
-                        rmul!(view(Hjm1, i1:i, (i - 1):i), hr)
-                        if wantZ
-                            rmul!(view(Z[j], :, (i - 1):i), hr)
+                    (verbosity[] > 1) && replaceG && println("nontrivial chain, reals")
+                    # MB03WD only runs the 2x2 QZ once, but that can leave a (small)
+                    # subdiagional in H1 so the factorization is poor after nulling.
+                    for its2 in 1:20
+                        if replaceG
+                            G, _ = givens(H1[i - 1, i - 1], H1[i, i - 1], 1, 2)
                         end
+                        # act on cols/rows i-1:i
+                        lmul!(G, view(H1, (i - 1):i, (i - 1):i2))
+                        rmul!(view(Hp, i1:i, (i - 1):i), G')
+                        # rmul!(view(H1, :, i-1:i2), G')
+                        # lmul!(G, view(H[p], i1:i, :))
+                        if wantZ
+                            rmul!(view(Z[1], :, (i - 1):i), G')
+                        end
+                        for j in p:-1:max(2, jmax + 1)
+                            Hj = Hs[j - 1]
+                            # reflector to annihilate Hⱼ[i,i-1] from the left
+                            v[1:2] .= (Hj[i - 1, i - 1], Hj[i, i - 1])
+                            ξ = view(v, 1:2)
+                            t = _reflector!(ξ)
+                            hr = Householder{T, typeof(ξ)}(view(ξ, 2:2), t)
+                            Hj[(i - 1):i, i - 1] .= (v[1], zero(T))
+                            lmul!(hr', view(Hj, (i - 1):i, i:i2))
+                            # and transform columns of Hⱼ₋₁, Z
+                            Hjm1 = j == 2 ? H1 : Hs[j - 2]
+                            rmul!(view(Hjm1, i1:i, (i - 1):i), hr)
+                            if wantZ
+                                rmul!(view(Z[j], :, (i - 1):i), hr)
+                            end
+                        end
+                        # println("new H1 block: ",H1[i-1:i,i-1:i])
+                        if !replaceG || (abs(H1[i, i - 1]) < max(smlnum, ulp * max(a1, a2)))
+                            break
+                        end
+                        replaceG = true
                     end
                     if jmax > 0
                         H1[i, i - 1] = zero(T)
@@ -959,11 +1029,15 @@ function pschur!(H1H::S1,
                     end
                     if replaceG
                         # sometimes the rotation swaps the eigvals
-                        λ[i - 1] = H1[i - 1, i - 1]
-                        λ[i] = H1[i, i]
+                        λ1 = H1[i - 1, i - 1]
+                        λ2 = H1[i, i]
                         for j in 1:(p - 1)
-                            λ[i - 1] *= Hs[j][i - 1, i - 1]
-                            λ[i] *= Hs[j][i, i]
+                            λ1 *= Hs[j][i - 1, i - 1]
+                            λ2 *= Hs[j][i, i]
+                        end
+                        # but the previous computation was likely more accurate
+                        if abs(λ1 - λ[1]) > abs(λ1 - λ[2])
+                            λ[i - 1], λ[i] = λ[i], λ[i-1]
                         end
                     end
                 end # two real eigvals branch
@@ -973,19 +1047,25 @@ function pschur!(H1H::S1,
         # decrement iteration limit and advance to next i
         maxitleft -= its
         i = l - 1
+        maxits = max(maxits, its)
+        niter += its
     end # while, main loop
-    @_dbg_rpschur fcheck("after main loop", H1, Hs, Z)
+    @_dbg_rpschur fcheck("after main loop", H1, Hs, Z, check_A1=true)
     # next block is not in MB02WD, but needed to clear out dust.
     # I probably applied a reflector or rotation to an extra row somewhere
     # giving roundoff instead of 0
     for i in 1:(n - 1)
         if isreal(λ[i])
+            if verbosity[] > 1 && (H1[i + 1, i] != 0)
+                println("forcing subdiag $i of H1 from $(H1[i + 1, i]) to 0")
+            end
             H1[i + 1, i] = 0
         end
     end
     if !wantZ
         Z = [similar(H1, 0, 0)]
     end
+    verbosity[] > 0 && println("total QR iterations: $niter largest was $maxits")
     if rev
         if wantZ
             Zr = similar(Z)

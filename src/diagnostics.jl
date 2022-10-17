@@ -44,6 +44,7 @@ _printsty(c, xs...) =
 # primarily used in the codes operating on periodic Hessenberg series.
 struct _FacChecker{TM}
     A1init::TM
+    Apinit::TM
     Aπinit::TM
     p::Int
     valid::Bool
@@ -63,12 +64,15 @@ function _FacChecker(H1, Hs, Z, wantZ, S=nothing; left=false, ischur=1)
     end
     p = length(Hs) + 1
     A1 = (ischur == 1) ? H1 : Hs[1]
+    Ap = (ischur == p) ? H1 : Hs[p-1]
     if left
         A1init = Z[p > 1 ? 2 : 1] * A1 * Z[1]'
+        Apinit = Z[1] * Ap * Z[p]'
         Aπinit = A1 * Z[1]';
     else
-        A1init = Z[1] * H1 * Z[p > 1 ? 2 : 1]'
-        Aπinit = Z[1] * H1;
+        A1init = Z[1] * A1 * Z[p > 1 ? 2 : 1]'
+        Apinit = Z[p] * Ap * Z[1]'
+        Aπinit = Z[1] * A1;
     end
 
     il = (ischur == 1) ? 0 : 1
@@ -106,27 +110,38 @@ function _FacChecker(H1, Hs, Z, wantZ, S=nothing; left=false, ischur=1)
         show(stdout, "text/plain",  Aπinit)
         println()
     end
-    return _FacChecker(A1init, Aπinit, p, true, left, ischur)
+    return _FacChecker(A1init, Apinit, Aπinit, p, true, left, ischur)
 end
 
 function (fc::_FacChecker)(str, H1, Hs, Z, S = nothing;
-                           check_Aπ = true, check_A1 = false, pd=nothing)
+                           check_Aπ = true, check_A1 = false, check_Ap = false, pd=nothing)
     fc.valid || return nothing
     sx(l) = S === nothing ? true : S[l]
+    p = fc.p
     if check_A1
         if fc.left
-            A1tmp = Z[fc.p > 1 ? 2 : 1] * H1 * Z[1]'
+            A1tmp = Z[p > 1 ? 2 : 1] * H1 * Z[1]'
         else
-            A1tmp = Z[1] * H1 * Z[fc.p > 1 ? 2 : 1]'
+            A1tmp = Z[1] * H1 * Z[p > 1 ? 2 : 1]'
         end
         t = norm(A1tmp - fc.A1init)
         println(str, " H1 factor error: ", t, " rel. ", t/norm(fc.A1init))
+    end
+    if check_Ap
+        Ap = (fc.ischur == p) ? H1 : Hs[p-1]
+        if fc.left
+            Aptmp = Z[1] * Ap * Z[p]'
+        else
+            Aptmp = Z[p] * Ap * Z[1]'
+        end
+        t = norm(Aptmp - fc.Apinit)
+        println(str, " Hp factor error: ", t, " rel. ", t/norm(fc.Apinit))
     end
     if check_Aπ
         Hl = (fc.ischur == 1) ? H1 : Hs[1]
         Aπtmp = Hl
         il = (fc.ischur == 1) ? 0 : 1
-        for l in 2:fc.p
+        for l in 2:p
             if l == fc.ischur
                 Hl = H1
             else
@@ -152,7 +167,12 @@ function (fc::_FacChecker)(str, H1, Hs, Z, S = nothing;
         end
         Aπtmp = Z[1] * Aπtmp * Z[1]'
         t = norm(Aπtmp - fc.Aπinit)
-        println(str, " ΠH error: ", t, " rel. ", t / norm( fc.Aπinit))
+        rel = t / norm( fc.Aπinit)
+        if rel > 10 * p * eps(real(eltype(H1)))
+            _printsty(:red,"$str ΠH error: $t rel. $rel\n")
+        else
+            println(str, " ΠH error: ", t, " rel. ", rel)
+        end
     end
     nothing
 end
