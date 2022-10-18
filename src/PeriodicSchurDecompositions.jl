@@ -301,13 +301,20 @@ const _extra_rq = Ref(false)
 const _allow_early_QR = Ref(false)
 
 """
-    pschur!(H1,Hs) -> PeriodicSchur
+    pschur!(H1,Us; Q) -> [`PeriodicSchur`](@ref)
 
-Computes a periodic Schur decomposition of a series of Hessenberg/triangular matrices.
+Computes a periodic Schur decomposition of a series of Hessenberg/upper-triangular matrices.
 
-If not `wantT` then just compute the eigenvalues.
-If `wantZ` then also compute orthogonal transformation matrices:
-if `Q` is unset, these will be the `Zⱼ`;
+`H1` must be upper Hessenberg, `Us` a vector of upper triangular matrices.
+The argument arrays are overwritten and used in the result.
+
+Keyword arguments:
+The result corresponds to the rightwards product `H1*prod(Us)` unless
+the optional argument `rev=true` is specified.
+Specify `wantT=false` to compute eigenvalues, but not the Schur factors.
+Specify `wantZ=false` to suppress computation of orthogonal transformation
+matrices.
+if `Q` is not provided, these will be the `Zⱼ` factors;
 if `Q` is set to a vector of matrices `Qⱼ`, they will be the products `QⱼZⱼ`.
 """
 function pschur!(H1H::S1,

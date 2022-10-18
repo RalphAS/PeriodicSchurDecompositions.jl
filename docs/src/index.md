@@ -6,7 +6,10 @@ CurrentModule = PeriodicSchurDecompositions
 
 This Julia package provides implementations of the periodic Schur decomposition
 of matrix products of real element types and of the generalized periodic Schur
-decomposition for complex element types.
+decomposition for real and complex element types. Functions for reordering invariant
+subspaces are also provided. A Krylov-Schur scheme for computing extreme eigenvalues
+and corresponding subspaces of products of linear operators in large-dimensional spaces
+is also included.
 
 ## Definitions
 

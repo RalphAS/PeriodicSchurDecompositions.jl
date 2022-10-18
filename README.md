@@ -56,7 +56,7 @@ The GPSD is an extension of the QZ decomposition used for generalized eigenvalue
 problems.
 
 This package provides a GPSD for real and complex element types. The PSD is obviously
-a special case of the GPSD.
+a special case of the GPSD, but the implementations are separate for real eltypes.
 
 The basic API is as follows:
 ```julia
@@ -76,7 +76,7 @@ decomposed form in this case).
 Selected eigenvalues and their associated subspace can be moved to the top of
 a periodic Schur decomposition with `ordschur!` methods.
 
-Currently reordering is only implemented for standard, not generalized, decompositions.
+Reordering is available for both standard and generalized decompositions.
 
 ## Large problems: periodic Krylov-Schur
 
