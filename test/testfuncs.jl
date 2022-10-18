@@ -116,7 +116,7 @@ function pschur_check(A::AbstractVector{TM}, pS;
                 println("residual[$j]: $r")
             end
         else
-            @test norm(A[j] - Ax[j]) < tol * eps(real(T)) * n
+            @test norm(A[j] - Ax[j]) < tol * eps(real(T)) * opnorm(A[j],1)
         end
     end
     if checkλ

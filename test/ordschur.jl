@@ -28,7 +28,7 @@ for T in [Float64, Complex{Float64}]
             select[idx[1:nsel]] .= true
             ps1 = deepcopy(ps0)
             ps1 = ordschur!(ps1, select)
-            pschur_check(A, ps1; checkλ = false, tol = (p == 1) ? 20000 : 32)
+            pschur_check(A, ps1; checkλ = false)
             λ1sel = ps1.values[1:nsel]
             for j in 1:nsel
                 λ0 = λ0s[idx[j]]
@@ -42,7 +42,7 @@ for T in [Float64, Complex{Float64}]
             select[idx[1:nsel]] .= true
             ps1 = deepcopy(ps0)
             ps1 = ordschur!(ps1, select)
-            pschur_check(A, ps1; checkλ = false, tol = (p == 1) ? 20000 : 32)
+            pschur_check(A, ps1; checkλ = false)
             λ1sel = ps1.values[1:nsel]
             for j in 1:nsel
                 λ0 = λ0s[idx[j]]

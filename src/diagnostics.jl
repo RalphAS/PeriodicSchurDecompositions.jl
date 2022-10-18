@@ -186,8 +186,6 @@ end
 Verify integrity of a (generalized) periodic Schur decomposition.
 Returns a status code (Bool) and a vector of
 normalized factorization errors (which should be O(1)).
-
-WARNING: this function assumes dominant entries in `As` are O(1).
 """
 function checkpsd(P::AbstractPeriodicSchur{T}, Hs::AbstractVector;
                   quiet = false, thresh = 100, strict = true) where {T}
@@ -248,16 +246,15 @@ function checkpsd(P::AbstractPeriodicSchur{T}, Hs::AbstractVector;
             result = false
         end
         Hl = Hs[l]
-        # Note: MB03BZ description has conjugation on the wrong side
         if S[l] ⊻ (P.orientation == 'L')
             Hx = P.Z[l] * Tl * P.Z[l1]'
         else
             Hx = P.Z[l1] * Tl * P.Z[l]'
         end
-        err[l] = norm(Hx - Hl) / eps(real(T)) / n
+        err[l] = norm(Hx - Hl) / eps(real(T)) / opnorm(Hl, 1)
         if err[l] > thresh
             if !quiet
-                @warn "large factorization error ($(err[l]) nϵ) for l=$l"
+                @warn "large factorization error ($(err[l]) ϵ‖Aₗ‖₁) for l=$l"
             end
             result = false
         end
