@@ -19,6 +19,7 @@ makedocs(;
         "Usage" => "usage.md",
         "Interface" => Any[
             "lib/public.md",
+            "lib/types.md",
         ]
     ],
 )

@@ -26,17 +26,3 @@ partial_pschur
 ```@docs
 phessenberg!
 ```
-
-# Types
-```@docs
-PeriodicSchur
-```
-
-```@docs
-GeneralizedPeriodicSchur
-```
-
-```@docs
-PartialPeriodicSchur
-```
-

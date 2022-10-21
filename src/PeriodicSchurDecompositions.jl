@@ -301,12 +301,13 @@ const _extra_rq = Ref(false)
 const _allow_early_QR = Ref(false)
 
 """
-    pschur!(H1,Us; Q) -> [`PeriodicSchur`](@ref)
+    pschur!(H1,Us; Q) -> PeriodicSchur
 
 Computes a periodic Schur decomposition of a series of Hessenberg/upper-triangular matrices.
 
 `H1` must be upper Hessenberg, `Us` a vector of upper triangular matrices.
-The argument arrays are overwritten and used in the result.
+The argument arrays are overwritten and used in the result, a
+[`PeriodicSchur`](@ref) object.
 
 Keyword arguments:
 The result corresponds to the rightwards product `H1*prod(Us)` unless
