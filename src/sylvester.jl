@@ -31,6 +31,23 @@ function _psyl2kron(A::Vector{MT1},
     return Zpse
 end
 
+function _psyl2spkron(A::Vector{MT1},
+                    B::Vector{MT2}) where {MT1 <: AbstractMatrix{T},
+                                           MT2 <: AbstractMatrix{T}} where {T}
+    K = length(A)
+    p1 = checksquare(A[1])
+    p2 = checksquare(B[1])
+    eye1 = I(p1)
+    eye2 = I(p2)
+    Zd = [kron(transpose(B[K]), -eye1)]
+    Zl = [kron(eye2, A[1])]
+    for k in 1:(K - 1)
+        push!(Zd, kron(transpose(B[k]), -eye1))
+        push!(Zl, kron(eye2, A[k + 1]))
+    end
+    return Zd, Zl
+end
+
 function _pgsyl2kron(A::Vector{MT1},
                      B::Vector{MT2},
                      S::AbstractVector{Bool}) where {MT1 <: AbstractMatrix{T},
@@ -122,15 +139,19 @@ function _psylsolve(A::Vector{MT1},
     p2 = checksquare(B[1])
     pp = p1 * p2
     scale = one(real(T))
-    Zpse = _psyl2kron(A, B)
-    F = qr!(Zpse)
-    _checkqr(F)
+    # Zpse = _psyl2kron(A, B)
+    # F = qr!(Zpse)
+    # _checkqr(F)
+    Zd, Zl = _psyl2spkron(A, B)
     Cv = zeros(T, pp, K)
     Cv[:, 1] .= -C[K][:]
     for k in 1:(K - 1)
         Cv[:, k + 1] .= -C[k][:]
     end
-    Xv = F \ vec(Cv)
+    # Xv = F \ vec(Cv)
+    y = vec(Cv)
+    R, Zu, Zr, _ = _babd_qr!(Zd, Zl, y)
+    Xv = _babd_solve!(R, Zu, Zr, y)
     return Xv, scale
 end
 

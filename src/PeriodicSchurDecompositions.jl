@@ -1099,6 +1099,7 @@ include("rschur2x2.jl")
 include("generalized.jl")
 include("rgeneralized.jl")
 include("utils.jl")
+include("babd.jl")
 include("ordschur.jl")
 
 function pschur!(A::AbstractVector{TA},
