@@ -13,7 +13,7 @@
 # Zd are the diagonal blocks; they are overwritten.
 # Zl are the first subdiagonal, except Zl[K] is in upper right corner;
 # they are preserved.
-# Zd[j] and Zl[j] in in block column j.
+# Zd[j] and Zl[j] are in block column j.
 function _babd_qr!(Zd, Zl::AbstractVector{TM}, y; wantQ=false
                   ) where {TM <: AbstractMatrix{T}} where T
     K = length(Zl)
@@ -58,7 +58,7 @@ function _babd_qr!(Zd, Zl::AbstractVector{TM}, y; wantQ=false
         mul!(view(y, i0+1:i0+2m), q', yt)
         i0 += m
     end
-    q,r = qr(Zd[K])
+    q,r = qr!(Zd[K])
     R[K] .= r
     i0 = (K-1) * m
     if wantQ

@@ -120,8 +120,7 @@ function _safeprod(P, as::AbstractVector{T}) where {T}
 end
 
 # avoid crypic LAPACK exception
-function _checkqr(F)
-    R = F.R
+function _checkqr(R)
     @inbounds for jj in diagind(R)
         if R[jj] == 0
             n = size(R, 1)

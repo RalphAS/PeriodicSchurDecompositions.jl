@@ -31,6 +31,8 @@ function _psyl2kron(A::Vector{MT1},
     return Zpse
 end
 
+# collect the blocks for the sparse (cyclic block bidiagonal)
+# Kronecker representation of a periodic Sylvester operator
 function _psyl2spkron(A::Vector{MT1},
                     B::Vector{MT2}) where {MT1 <: AbstractMatrix{T},
                                            MT2 <: AbstractMatrix{T}} where {T}
@@ -80,6 +82,42 @@ function _pgsyl2kron(A::Vector{MT1},
         end
     end
     return Zpse
+end
+
+# collect the blocks for the sparse (cyclic block bidiagonal)
+# Kronecker representation of a periodic generalized Sylvester operator
+function _pgsyl2spkron(A::Vector{MT1},
+                     B::Vector{MT2},
+                     S::AbstractVector{Bool}) where {MT1 <: AbstractMatrix{T},
+                                           MT2 <: AbstractMatrix{T}} where {T}
+    K = length(A)
+    p1 = checksquare(A[1])
+    p2 = checksquare(B[1])
+    eye1 = I(p1)
+    eye2 = I(p2)
+    if S[K]
+        Zd = [kron(transpose(B[K]), -eye1)]
+    else
+        Zd = [kron(eye2, A[K])]
+    end
+    if S[1]
+        Zl = [kron(eye2, A[1])]
+    else
+        Zl = [kron(transpose(B[1]), -eye1)]
+    end
+    for k in 1:(K - 1)
+        if S[k]
+            push!(Zd, kron(transpose(B[k]), -eye1))
+        else
+            push!(Zd, kron(eye2, A[k]))
+        end
+        if S[k + 1]
+            push!(Zl, kron(eye2, A[k + 1]))
+        else
+            push!(Zl, kron(transpose(B[k + 1]), -eye1))
+        end
+    end
+    return Zd, Zl
 end
 
 # simple version for 1x1
@@ -139,18 +177,17 @@ function _psylsolve(A::Vector{MT1},
     p2 = checksquare(B[1])
     pp = p1 * p2
     scale = one(real(T))
-    # Zpse = _psyl2kron(A, B)
-    # F = qr!(Zpse)
-    # _checkqr(F)
     Zd, Zl = _psyl2spkron(A, B)
     Cv = zeros(T, pp, K)
     Cv[:, 1] .= -C[K][:]
     for k in 1:(K - 1)
         Cv[:, k + 1] .= -C[k][:]
     end
-    # Xv = F \ vec(Cv)
     y = vec(Cv)
     R, Zu, Zr, _ = _babd_qr!(Zd, Zl, y)
+    for r in R
+        _checkqr(r)
+    end
     Xv = _babd_solve!(R, Zu, Zr, y)
     return Xv, scale
 end
@@ -161,7 +198,7 @@ function _psylsolve1(A::Vector{T}, B::Vector{T}, C::Vector{T}) where {T}
     scale = one(real(T))
     Zpse = _psyl1rep(A, B)
     F = qr!(Zpse)
-    _checkqr(F)
+    _checkqr(F.R)
     Cr = -circshift(C, 1)
     Xv = F \ Cr
     return Xv, scale
@@ -179,15 +216,18 @@ function _pgsylsolve(A::Vector{MT1},
     p2 = checksquare(B[1])
     pp = p1 * p2
     scale = one(real(T))
-    Zpse = _pgsyl2kron(A, B, S)
-    F = qr!(Zpse)
-    _checkqr(F)
+    Zd, Zl = _pgsyl2spkron(A, B, S)
     Cv = zeros(T, pp, K)
     Cv[:, 1] .= -C[K][:]
     for k in 1:(K - 1)
         Cv[:, k + 1] .= -C[k][:]
     end
-    Xv = F \ vec(Cv)
+    y = vec(Cv)
+    R, Zu, Zr, _ = _babd_qr!(Zd, Zl, y)
+    for r in R
+        _checkqr(r)
+    end
+    Xv = _babd_solve!(R, Zu, Zr, y)
     return Xv, scale
 end
 
@@ -198,7 +238,7 @@ function _pgsylsolve1(A::Vector{T}, B::Vector{T}, C::Vector{T},
     scale = one(real(T))
     Zpse = _pgsyl1rep(A, B, S)
     F = qr!(Zpse)
-    _checkqr(F)
+    _checkqr(F.R)
     Cr = -circshift(C, 1)
     Xv = F \ Cr
     return Xv, scale
