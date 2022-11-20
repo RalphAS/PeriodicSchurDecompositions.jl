@@ -67,4 +67,4 @@ D. Kressner, thesis and assorted articles.
 
 ## Acknowledgements
 
-The meat of this package is mainly a translation of implementations in [the SLICOT library](https://github.com/SLICOT/SLICOT-Reference.git).
+The meat of this package is largely a translation of implementations in [the SLICOT library](https://github.com/SLICOT/SLICOT-Reference.git).

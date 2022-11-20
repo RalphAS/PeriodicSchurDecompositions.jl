@@ -98,6 +98,7 @@ with left (`lr=:L`) or right (`lr=:R`) orientation.
 
 Entries in `S` must be `false` for the corresponding entries in `A` which are effectively
 inverted, and `true` for the rest. Currently `Sⱼ` must be `true` for the leftmost term.
+(But see [`gpschur`](@ref) for the common case of leftwards alternating signs.)
 
 Optional arguments `wantT` and `wantZ`, defaulting to `true`, are booleans which may
 be used to save time and memory by suppressing computation of the `T` and `Z`

@@ -1,6 +1,6 @@
 # Usage
 
-For ordinary periodic Schur decompositions, the basic API is as follows:
+For ordinary periodic Schur decompositions, the basic API ([`pschur`](@ref)) is as follows:
 
 ```julia
 p = period_of_your_problem()
@@ -8,7 +8,7 @@ Aarg = [your_matrix(j) for j in 1:p]
 pS = pschur!(Aarg, :R)
 your_eigvals = pS.values
 ```
-The result `pS` is a `PeriodicSchur` object.
+The result `pS` is a [`PeriodicSchur`](@ref) object.
 Computation of the Schur vectors is
 fairly expensive, so it may be suppressed via keyword arguments (`wantZ=false`).
 
@@ -22,14 +22,16 @@ S = [sign_for_your_problem(j) for j in 1:p] # a vector of `Bool`, true for posit
 gpS = pschur!(Aarg, S, :R)
 your_eigvals = gpS.values
 ```
-The result `gpS` is a `GeneralizedPeriodicSchur` object.
+The result `gpS` is a [`GeneralizedPeriodicSchur`](@ref) object. For the common
+case of lefwards alternating `A` (not inverted) and `B` inverted, see [`gpschur`](@ref).
 
-For a partial periodic Schur decomposition, the basic API is
+For a partial periodic Schur decomposition, the basic API ([`partial_pschur`](@ref)) is
 
 ```julia
     pps, hist = partial_pschur(Aarg, nev, which; kw...)
 ```
-The result is a `PartialPeriodicSchur` object `pps`, with a summary `hist` of the iteration.
+The result is a [`PartialPeriodicSchur`](@ref) object `pps`, with a summary `hist` of the
+iteration.
 `pps` usually includes the `nev` eigenvalues nearest the edge of the convex hull of the
 spectrum specified by `which`. The interface is derived from the `ArnoldiMethod` package,
 q.v. for additional details.
@@ -41,3 +43,9 @@ the matrices leftwards (`A[p]*...*A[2]*A[1]`), corresponding to an orientation
 argument `:L`.
 
 At present, `partial_pschur` is only implemented for the left orientation.
+
+## Operations on the decompositions
+
+For eigenvectors, see [`eigvecs`](@ref). For reordering of subspaces, see
+[`ordschur!`](@ref).
+

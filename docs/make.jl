@@ -1,4 +1,5 @@
 using PeriodicSchurDecompositions
+using PeriodicSchurDecompositions: AbstractPeriodicSchur
 using LinearAlgebra
 using Documenter
 
