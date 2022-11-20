@@ -134,5 +134,6 @@ end
 include("generalized.jl")
 
 include("ordschur.jl")
+include("vectors.jl")
 
 include("krylov.jl")

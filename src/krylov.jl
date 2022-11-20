@@ -92,7 +92,7 @@ struct PartialPeriodicSchur{
                             St <: AbstractMatrix,
                             Sz <: AbstractMatrix,
                             Tλ <: Complex
-                            } # <: AbstractPeriodicSchur{Ty}
+                            }  <: AbstractPeriodicSchur{Ty}
     "Quasi upper triangular matrix"
     T1::St1
     "Upper triangular matrices"
@@ -915,4 +915,18 @@ function _verify_locks!(ritz, Hp::AbstractMatrix{T}, nlock, isconverged) where {
         println("resetting lock count to $ncv")
     end
     return ncv
+end
+
+# PartialPeriodicSchur is just a special case of PeriodicSchur
+# for most purposes
+"""
+    eigvecs(ps::PartialPeriodicSchur, select::Vector{Bool}; shifted::Bool)
+
+Similar to `eigvecs(ps::PeriodicSchur, select;...)`.
+"""
+function LinearAlgebra.eigvecs(ps0::PartialPeriodicSchur,
+                               select::AbstractVector{Bool}; kwargs...)
+    P = deepcopy(ps0)
+    ps = PeriodicSchur(P.T1, P.T, P.Z, P.values, P.orientation, P.schurindex)
+    return eigvecs(ps, select; kwargs...)
 end

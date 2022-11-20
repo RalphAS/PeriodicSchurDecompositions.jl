@@ -10,6 +10,7 @@ using LinearAlgebra: Givens, givensAlgorithm
 
 export pschur, pschur!, phessenberg!, gpschur, PeriodicSchur, GeneralizedPeriodicSchur
 
+# not documented until we decide what we should guarantee about it
 abstract type AbstractPeriodicSchur{T} end
 
 # Do this early in case we want to use any bits in constructors etc.
@@ -1110,6 +1111,8 @@ function pschur!(A::AbstractVector{TA},
 end
 
 include("krylov.jl")
+
+include("vectors.jl")
 
 end # module
 
