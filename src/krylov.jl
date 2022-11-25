@@ -907,9 +907,14 @@ function _verify_locks!(ritz, Hp::AbstractMatrix{T}, nlock, isconverged) where {
         end
     end
     ncv = 0
-    for i in 1:nlock
+    i = 1
+    while i <= nlock
         isconverged(i) || break
+        if T <: Real && !isreal(ritz.λs[i])
+            i += 1
+        end
         ncv = i
+        i += 1
     end
     if _kry_verby[] > 0 && ncv != nlock
         println("resetting lock count to $ncv")
