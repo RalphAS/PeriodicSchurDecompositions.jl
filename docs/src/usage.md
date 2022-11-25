@@ -51,14 +51,15 @@ For eigenvectors, see [`eigvecs`](@ref). For reordering of subspaces, see
 
 ## Krylov-Schur with GPUArrays
 
-!!! Warning
-    This capability should be considered experimental
+!!! warning
+    The GPU capability should be considered experimental;
+    testing is in progress.
 
 The Krylov-Schur code can be made to do Schur/Ritz-vector operations
 (mainly, multiplication by the `A` matrices or operators) on a GPU
 by use of `LinearMap`s.  Currently it is necessary to inform the code
 that unusual arrays are in use by providing an initial vector of the
-appropriate type as the starting vector for the iteration, as follows:
+appropriate type as the starting vector for the iteration. For example:
 
 ```
 using LinearMaps
