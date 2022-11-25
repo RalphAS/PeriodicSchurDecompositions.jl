@@ -15,13 +15,14 @@ function LinearAlgebra.ordschur!(P::AbstractPeriodicSchur{T}, select::AbstractVe
         rev = true
     end
 
-    if P.schurindex == 1
+    s = P.schurindex
+    if s == 1
         Px = P
-    elseif P.schurindex == p
+    elseif s == p
         cshift = 1
         Px = _circshift(P, 1)
     else
-        throw(ArgumentError("only implemented for schurindex in (1,p)"))
+        throw(ArgumentError("only implemented for schurindex in (1,p), got $s/$p"))
     end
     if wantZ
         if specialQ

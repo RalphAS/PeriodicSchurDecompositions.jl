@@ -8,7 +8,8 @@ function check(PS::PartialPeriodicSchur{T}, As; otol=100) where {T}
     p = length(As)
     n = size(As[1],1)
     Us = PS.Z
-    Bs = PS.T
+    # don't modify PS, just copy some pointers
+    Bs = copy(PS.T)
     push!(Bs, PS.T1)
     k = size(Us[1],2)
     b = norm(view(Bs[p],1:k,1:k))
@@ -55,7 +56,8 @@ function mkmats1(T, n=30, p=3, xpnd=1.25)
 end
 
 function pkstest1(As, psfull, which;
-                  nev=4, tol=1e-10, k0=6, logf=nothing, λtol=1e-5, niter=60)
+                  nev=4, tol=1e-10, k0=6, logf=nothing, λtol=1e-5, niter=60,
+                  verbosity=0)
     n = size(As[1],1)
     p = length(As)
     T = eltype(As[1])
@@ -72,20 +74,26 @@ function pkstest1(As, psfull, which;
         for λ in ps.values
             @test any(isapprox.(vfull[1:2*nev], λ, rtol=λtol))
         end
-    end
-    return ps
-end
-
-for T in [ComplexF64]
-    As = mkmats1(T)
-    ps0 = pschur(As,:L)
-    @testset "krylov, $T" begin
-        for w in [:LM, :SR, :LR, :LI, :SI]
-            @testset "$w" begin
-                pkstest1(As, ps0, w)
-            end
+        if verbosity > 0
+            println("KS λ="); display(ps.values); println()
+            println("full λ="); display(vfull[1:2*nev]); println()
         end
     end
+    @testset "eigvecs" begin
+        nx = size(ps.Z[1], 2)
+        sel = falses(nx)
+        ny = nx >> 1
+        sel[1:ny] .= true
+        Vs = eigvecs(ps, sel)
+
+        # FIXME: tolerance seems too large
+        # This accommodates intermittent problems in complex case;
+        # too awkward for broken test.
+
+        # eigvecs might modify sel
+        ev_check(As, Vs, ps.values[sel], tol=20*sqrt(eps(real(T))))
+    end
+    return ps
 end
 
 for T in [Float64]
@@ -100,3 +108,14 @@ for T in [Float64]
     end
 end
 
+for T in [ComplexF64]
+    As = mkmats1(T)
+    ps0 = pschur(As,:L)
+    @testset "krylov, $T" begin
+        for w in [:LM, :SR, :LR, :LI, :SI]
+            @testset "$w" begin
+                pkstest1(As, ps0, w)
+            end
+        end
+    end
+end

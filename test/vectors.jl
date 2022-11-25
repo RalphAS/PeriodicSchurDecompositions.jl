@@ -1,17 +1,3 @@
-function ev_check(As,Vs::AbstractVector{TM},λs, tol=sqrt(eps(real(T)))
-                  ) where {TM <: AbstractMatrix{T}} where {T}
-    p = length(As)
-    nev = size(Vs[1],2)
-    for ki in 1:nev
-        μ = λs[ki] ^ (1/p)
-        for l in 1:p
-            ref = abs(μ) * norm(Vs[mod(l,p)+1][:,ki])
-            err = norm(As[l] * Vs[l][:,ki] - μ * Vs[mod(l,p)+1][:,ki])
-            @test err < tol * ref
-        end
-    end
-end
-
 for T in [Float64, Complex{Float64}]
   for p in [5,1]
     @testset "eigvecs $T: distinct real, p=$p" begin
@@ -42,6 +28,8 @@ for T in [Float64, Complex{Float64}]
             select[idx[1:nsel]] .= true
             Vs = eigvecs(ps0, select)
             ev_check(A, Vs, λ0s[select])
+            V1 = eigvecs(ps0, select, shifted=false)
+            @test V1[1] ≈ Vs[1]
         end
         @testset "largest" begin
             idx = sortperm(λ0s, by=abs, rev=true)

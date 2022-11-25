@@ -227,7 +227,7 @@ for T in [Float64]
         p = 5
         n = 7
         jcs = [3,6]
-        ps0, A = mkrps(n,p,jcs,T; tri=false, alt=true, check=true)
+        ps0, A = mkrps(n,p,jcs,T; tri=false, alt=true)
         # @show (ps0.orientation, ps0.schurindex, ps0.S)
         # when we're sure we get [a,b,z,z',c,w,w'] we can copy from std case
         λ0s = ps0.values

@@ -419,3 +419,18 @@ function expsplit(p,T)
          -(71750/11)*fac^(3*p)]
     return A, λ
 end
+
+# eigenvectors
+function ev_check(As,Vs::AbstractVector{TM},λs; tol=sqrt(eps(real(T)))
+                  ) where {TM <: AbstractMatrix{T}} where {T}
+    p = length(As)
+    nev = size(Vs[1],2)
+    for ki in 1:nev
+        μ = λs[ki] ^ (1/p)
+        for l in 1:p
+            ref = abs(μ) * norm(Vs[mod(l,p)+1][:,ki])
+            err = norm(As[l] * Vs[l][:,ki] - μ * Vs[mod(l,p)+1][:,ki])
+            @test err < tol * ref
+        end
+    end
+end
