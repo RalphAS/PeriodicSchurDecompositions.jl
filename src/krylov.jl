@@ -33,9 +33,19 @@ struct PKrylov{T, TV <: StridedMatrix{T}, TB <: StridedMatrix{T}}
     kcur::Base.RefValue{Int}
     vrand!::Any
 end
+
 function PKrylov{T}(p::Int, n::Int, k::Int, randfunc!) where {T}
     k <= n * p || throw(ArgumentError("Krylov dimension may not exceed matrix order."))
     V = vcat([Matrix{T}(undef, n, k + 1)], [Matrix{T}(undef, n, k) for _ in 1:(p - 1)])
+    H = [zeros(T, k, k) for _ in 1:(p - 1)]
+    push!(H, zeros(T, k + 1, k))
+    return PKrylov{T, eltype(V), eltype(H)}(V, H, Ref(0), randfunc!)
+end
+
+# variant where an exemplar is provided (e.g. CuArray)
+function PKrylov{T}(p::Int, n::Int, k::Int, randfunc!, vex) where {T}
+    k <= n * p || throw(ArgumentError("Krylov dimension may not exceed matrix order."))
+    V = vcat([similar(vex, n, k + 1)], [similar(vex, n, k) for _ in 1:(p - 1)])
     H = [zeros(T, k, k) for _ in 1:(p - 1)]
     push!(H, zeros(T, k + 1, k))
     return PKrylov{T, eltype(V), eltype(H)}(V, H, Ref(0), randfunc!)
@@ -226,8 +236,10 @@ function periodic_arnoldi!(As::Vector{TA},
     n = size(As[1], 1)
     Hs = PK.Bs
     Us = PK.Vs
+    # deviant or device, take your pick
+    devarrays = !(Us[1] isa Matrix)
 
-    v = Vector{T}(undef, n)
+    v = similar(uj1)
     η = 1 / sqrt(2)
     k1 = krange[1]
     k2 = krange[end]
@@ -241,7 +253,11 @@ function periodic_arnoldi!(As::Vector{TA},
         @_dbg_arnoldi print("Arnoldi iter $j")
         ldeflate = 0
         jdeflate = 0
-        hj = view(h, 1:(j - 1))
+        if devarrays
+            hj = similar(Us[1], (j-1,))
+        else
+            hj = view(h, 1:(j - 1))
+        end
         null1 = false
         for l in 1:(p - 1)
             ujl = view(Us[l], :, j)
@@ -294,7 +310,12 @@ function periodic_arnoldi!(As::Vector{TA},
                 ujlp1 = view(Us[l + 1], :, j)
                 mul!(ujlp1, 1 / hjj, v)
             end
-            Hs[l][1:(j - 1), j] .= hj
+            if devarrays
+                hjx = Vector(hj)
+            else
+                hjx = hj
+            end
+            Hs[l][1:(j - 1), j] .= hjx
             Hs[l][j, j] = hjj
         end # l loop
         if null1
@@ -307,7 +328,11 @@ function periodic_arnoldi!(As::Vector{TA},
         mul!(v, As[p], view(Us[p], :, j))
         rnorm = norm(v)
         Uprev = view(Us[1], :, 1:j)
-        hj = view(h, 1:j)
+        if devarrays
+            hj = similar(Us[1], (j,))
+        else
+            hj = view(h, 1:j)
+        end
         mul!(hj, Uprev', v)
         mul!(v, Uprev, hj, -1, 1)
         wnorm = norm(v)
@@ -341,17 +366,30 @@ function periodic_arnoldi!(As::Vector{TA},
             ujlp1 = view(Us[1], :, j + 1)
             mul!(ujlp1, 1 / hjp1j, v)
         end
-        Hs[p][1:j, j] .= hj
+        if devarrays
+            hjx = Vector(hj)
+        else
+            hjx = hj
+        end
+        Hs[p][1:j, j] .= hjx
         Hs[p][j + 1, j] = hjp1j
         if ldeflate > 0
             @_dbg_arnoldi println()
             _kry_verby[] > 0 && println("deflating for singularity j=$jdeflate l=$ldeflate")
             Z = [Matrix{T}(I, j, j) for _ in 1:p]
             _deflate!(Hs[p], [Hs[ll] for ll in 1:(p - 1)], Z, ldeflate, jdeflate)
+            if devarrays
+                    Zl = similar(Us[1],j,j)
+            end
             for l in 1:p
                 # no change to Vs[p][:,kmax+1] (cf. Kressner)
                 vtmp = Us[l][:, 1:j]
-                mul!(view(Us[l], :, 1:j), vtmp, Z[l])
+                if devarrays
+                    copyto!(Zl, Z[l])
+                else
+                    Zl = Z[l]
+                end
+                mul!(view(Us[l], :, 1:j), vtmp, Zl)
             end
             hn = norm(view(Hs[p], 1:jdeflate, 1:jdeflate))
             if abs(Hs[p][jdeflate + 1, jdeflate]) < 100 * eps(real(T)) * hn
@@ -430,7 +468,11 @@ function partial_pschur(As::Vector{TA},
     end
     nev ≤ mindim ≤ maxdim ≤ p * n ||
         throw(ArgumentError("nev ≤ mindim ≤ maxdim does not hold, got $nev ≤ $mindim ≤ $maxdim"))
-    PK = PKrylov{T}(p, n, maxdim, vrand!)
+    if u1 === nothing
+        PK = PKrylov{T}(p, n, maxdim, vrand!)
+    else
+        PK = PKrylov{T}(p, n, maxdim, vrand!, u1)
+    end
     _partial_pschur!(As,
                      PK,
                      vtype(As[1]),
@@ -475,8 +517,10 @@ function _partial_pschur!(As,
     n = size(As[1], 1)
     Hs = PK.Bs
     Vs = PK.Vs
+    devarrays = !(Vs[1] isa Matrix)
+
     # workspace for change of basis
-    Vtmp = Matrix{T}(undef, n, kmax)
+    Vtmp = similar(Vs[1], n, kmax)
     Htmp = similar(PK.Bs[1])
     # FIXME: use views of these when ready
     # Qs = [Matrix{T}(undef, kmax, kmax) for _ in 1:p]
@@ -693,10 +737,18 @@ function _partial_pschur!(As,
         for l in 1:(p - 1)
             Hs[l][active:kmax, active:kmax] .= PS.T[p - l]
         end
+        if devarrays
+            Ql = similar(Vs[1],size(Qs[1]))
+        end
         for l in 1:p
             # no change to Vs[p][:,kmax+1] (cf. Kressner)
             copyto!(view(Vtmp, :, active:kmax), view(Vs[l], :, active:kmax))
-            mul!(view(Vs[l], :, active:kmax), view(Vtmp, :, active:kmax), Qs[l])
+            if devarrays
+                copyto!(Ql, Qs[l])
+            else
+                Ql = Qs[l]
+            end
+            mul!(view(Vs[l], :, active:kmax), view(Vtmp, :, active:kmax), Ql)
             if active > 1
                 htmp = view(Htmp, 1:(active - 1), active:kmax)
                 copyto!(htmp, view(Hs[l], 1:(active - 1), active:kmax))
@@ -745,17 +797,26 @@ end
 function _restore_hessenberg!(PK::PKrylov{T}, active, k, Vtmp, Htmp) where {T}
     Hs = PK.Bs
     Vs = PK.Vs
+    devarrays = !(Vs[1] isa Matrix)
     p = length(Hs)
     H1x = view(Hs[p], active:(k + 1), active:k)
     Hx = [view(Hs[l], active:k, active:k) for l in 1:(p - 1)]
     nwrk = k - active + 1
     Qs = [Matrix{T}(I, nwrk, nwrk) for _ in 1:p]
     H1x, Hx = _rphessenberg!(H1x, Hx, Qs)
+    if devarrays
+        Ql = similar(Vs[1], nwrk, nwrk)
+    end
     for l in 1:p
         # no change to Vs[p][:,kmax+1] (cf. Kressner)
         vtmp = view(Vtmp, :, active:k)
         copyto!(vtmp, view(Vs[l], :, active:k))
-        mul!(view(Vs[l], :, active:k), vtmp, Qs[l])
+        if devarrays
+            copyto!(Ql, Qs[l])
+        else
+            Ql = Qs[l]
+        end
+        mul!(view(Vs[l], :, active:k), vtmp, Ql)
         if active > 1
             htmp = view(Htmp, 1:(active - 1), active:k)
             copyto!(htmp, view(Hs[l], 1:(active - 1), active:k))
@@ -929,9 +990,30 @@ end
 
 Similar to `eigvecs(ps::PeriodicSchur, select;...)`.
 """
-function LinearAlgebra.eigvecs(ps0::PartialPeriodicSchur,
-                               select::AbstractVector{Bool}; kwargs...)
-    P = deepcopy(ps0)
-    ps = PeriodicSchur(P.T1, P.T, P.Z, P.values, P.orientation, P.schurindex)
-    return eigvecs(ps, select; kwargs...)
+function LinearAlgebra.eigvecs(ps0::PartialPeriodicSchur{T,TT1,TT,TZ},
+                               select::AbstractVector{Bool}; shifted=true
+                               ) where {T,TT1,TT,TZ}
+    devarrays = !(ps0.Z isa Matrix)
+    p = ps0.period
+    n,m = size(ps0.Z[1])
+    nv = shifted ? p : 1
+    T1 = deepcopy(ps0.T1)
+    Tls = deepcopy(ps0.T)
+    Z = [TT(I, m, m) for _ in 1:p]
+    ps = PeriodicSchur(T1, Tls, Z, ps0.values, ps0.orientation, ps0.schurindex)
+    V0s = eigvecs(ps, select; shifted=shifted)
+    Tc = complex(eltype(ps0.Z[1]))
+    if devarrays
+        V1s = [similar(ps0.Z[1], Tc, size(V0s[1])) for _ in 1:nv]
+        for l in 1:nv
+            copyto!(V1s[l], V0s[l])
+        end
+    else
+        V1s = V0s
+    end
+    Vs = [similar(ps0.Z[1], Tc, n, size(V0s[1], 2)) for _ in 1:nv]
+    for l in 1:nv
+          mul!(Vs[l], ps0.Z[l], V1s[l])
+    end
+    return Vs
 end

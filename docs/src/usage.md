@@ -49,3 +49,27 @@ At present, `partial_pschur` is only implemented for the left orientation.
 For eigenvectors, see [`eigvecs`](@ref). For reordering of subspaces, see
 [`ordschur!`](@ref).
 
+## Krylov-Schur with GPUArrays
+
+!!! Warning
+    This capability should be considered experimental
+
+The Krylov-Schur code can be made to do Schur/Ritz-vector operations
+(mainly, multiplication by the `A` matrices or operators) on a GPU
+by use of `LinearMap`s.  Currently it is necessary to inform the code
+that unusual arrays are in use by providing an initial vector of the
+appropriate type as the starting vector for the iteration, as follows:
+
+```
+using LinearMaps
+
+As_d = [cu(A) for A in As]
+n = size(As_d[1], 1)
+T = eltype(As_d[1])
+Amaps = [LinearMap{T}(v -> A*v, n, n) for A in As_d]
+v0_d = cu(rand(T, n))
+ps, history = partial_pschur(Amaps, nev, LM(); u1=v0_d)
+```
+
+Note that the first run will take a very long time because of all the
+compilation.
