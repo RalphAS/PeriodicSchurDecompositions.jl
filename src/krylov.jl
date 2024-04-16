@@ -12,7 +12,6 @@ using ArnoldiMethod:
                      RitzValues,
                      include_conjugate_pair,
                      OrderPerm,
-                     partition!,
                      Target
 using Random
 
@@ -600,7 +599,7 @@ function _partial_pschur!(As,
         Hpfoot = Hs[p][(kmax + 1):(kmax + 1), active:kmax] # rowvector
 
         # old logic (sorting 1:kmax) was wrong if we acquire an unconverged eigval
-        # preferable to the previously locked ones. (This is true of AM too.)
+        # preferable to the previously locked ones. (This was true of AM too.)
 
         copyto!(ritz.ord, Base.OneTo(kmax))
         sort!(ritz.ord, active, kmax, QuickSort, OrderPerm(ritz.λs, ordering))
@@ -616,11 +615,9 @@ function _partial_pschur!(As,
             _showritz(ritz, " (after Arnoldi)")
         end
 
-        # partition!(pred, seq, rg) reorders seq[rg] into preimages of pred -> true,false
-        # returning index of first false
-
         # find how many preferred ev may have converged
-        first_not_conv_idx = partition!(isconverged, ritz.ord, active:effective_nev)
+        sort!(view(ritz.ord, active:effective_nev), by=(x -> isconverged(x) ? 0 : 1))
+        first_not_conv_idx = findfirst(x -> !isconverged(x), ritz.ord)
         _kry_verby[] > 0 && println("ritz.ord after lock ordering: ", ritz.ord)
         nlockprev = nlock
         nlock = first_not_conv_idx === nothing ? effective_nev : first_not_conv_idx - 1
@@ -678,8 +675,14 @@ function _partial_pschur!(As,
             # pace AM, there is no reason to expect them to converge in order of preference,
             # so we normally allow a "buffer" of partially converged hopefuls.
             istart = nlock + 1 + purgebuffer
-            nopurge(i) = !isconverged(i)
-            conv_idx = partition!(nopurge, ritz.ord, istart:kgood)
+            sort!(view(ritz.ord, istart:kgood), by=(x -> isconverged(x) ? 1 : 0))
+            conv_idx = nothing
+            for i in istart:kgood
+                if isconverged(ritz.ord[i])
+                    conv_idx = i
+                    break
+                end
+            end
         else
             conv_idx = nothing
         end
