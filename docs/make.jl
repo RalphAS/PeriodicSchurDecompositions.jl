@@ -23,6 +23,7 @@ makedocs(;
             "lib/types.md",
         ]
     ],
+    checkdocs = :exports,
 )
 
 deploydocs(;
