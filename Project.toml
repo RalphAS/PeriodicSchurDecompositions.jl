@@ -1,7 +1,7 @@
 name = "PeriodicSchurDecompositions"
 uuid = "e5aedecb-f6c0-4c91-b6ff-fbae4296f459"
 authors = ["Ralph A. Smith and contributors"]
-version = "0.1.5"
+version = "0.1.6"
 
 [deps]
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -10,7 +10,7 @@ MatrixFactorizations = "a3b82374-2e81-5b9e-98ce-41277c0e4c87"
 ArnoldiMethod = "ec485272-7323-5ecc-a04f-4719b315124d"
 
 [compat]
-MatrixFactorizations = "0.8,0.9,1"
+MatrixFactorizations = "0.8,0.9,1,2,3"
 ArnoldiMethod = "0.1,0.2,0.3,0.4"
 julia = "1"
 

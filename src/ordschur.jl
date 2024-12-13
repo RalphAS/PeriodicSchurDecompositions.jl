@@ -146,6 +146,7 @@ function _updateλ!(P::PeriodicSchur{T}; strict = true) where {T <: Real}
                     pairflag = true
                 else
                     @error "unexpected subdiag in triang factor $l at $j: $(Al[j+1,j])"
+                    throw(ErrorException("ordschur algorithm bug: please report"))
                 end
             end
         end
