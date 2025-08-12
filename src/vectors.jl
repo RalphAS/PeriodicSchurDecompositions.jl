@@ -68,6 +68,10 @@ function LinearAlgebra.eigvecs(ps0::PeriodicSchur{T}, select::AbstractVector{Boo
     iλ = 1
     while iλ <= nvec
         if T <: Real && !isreal(ps.values[1])
+            if p == 1
+                @error "algorithm not implemented for trivial (p=1) complex pair"
+                # maybe copy from GenericSchur
+            end
             # I have a hammer so this must be a nail.
             # set up and solve the 2x2 cyclic problem
             μ = (ps.values[1] + 0im) ^ (1/RT(p))
@@ -96,21 +100,40 @@ function LinearAlgebra.eigvecs(ps0::PeriodicSchur{T}, select::AbstractVector{Boo
             R, Zu, Zr, _ = _babd_qr!(Zd, Zl, y)
             x = _babd_solve!(R, Zu, Zr, y)
             t = 1 / norm(view(x, 1:nsolve))
-            for l in 1:nmat
-                if left
+            if left
+                for l in 1:nmat
                     i0 = (l - 1) * nsolve
-                else
-                    i0 = l == 1 ? 0 : (p + 1 - l) * nsolve
+                    vl = Vs[l]
+                    mul!(view(vl,:,iλ),
+                        view(ps.Z[l],:,1:nsolve),
+                        view(x, i0+1:i0+nsolve),
+                        t, false)
+                    vl[:,iλ+1] .= conj.(vl[:,iλ])
                 end
-                vl = Vs[l]
-                mul!(view(vl,:,iλ),
-                     view(ps.Z[l],:,1:nsolve),
-                     view(x, i0+1:i0+nsolve),
-                     t, false)
-                vl[:,iλ+1] .= conj.(vl[:,iλ])
+            else
+                if !shifted
+                    vl = Vs[1] # destination
+                    i0 = 0
+                    mul!(view(vl,:,iλ),
+                        view(ps.Z[1],:,1:nsolve),
+                        view(x, i0+1:i0+nsolve),
+                        t, false)
+                    vl[:,iλ+1] .= conj.(vl[:,iλ])
+                else
+                    for l in p:-1:1
+                        i0 = (p - l) * nsolve
+                        lp = mod(l, p) + 1
+                        vl = Vs[l]
+                        mul!(view(vl,:,iλ),
+                            view(ps.Z[lp],:,1:nsolve),
+                            view(x, i0+1:i0+nsolve),
+                            t, false)
+                        vl[:,iλ+1] .= conj.(vl[:,iλ])
+                    end
+                end
             end
             nλ = 2
-        else
+        elseif left
             # A₁x₁ = T₁[1,1]*Z₂[:,1] = μ x₂, etc.
             il = 0
             fac = one(T)
@@ -123,7 +146,34 @@ function LinearAlgebra.eigvecs(ps0::PeriodicSchur{T}, select::AbstractVector{Boo
                     Tl = ps.T[il]
                 end
                 Vs[l][:,iλ] .= fac .* ps.Z[l][:,1]
-                fac *= (Tl[1,1] / μ)
+                # FIXME: this just prevents NaN generation
+                if μ != 0
+                    fac *= (Tl[1,1] / μ)
+                end
+            end
+            nλ = 1
+        else # simple case, right
+            if !shifted
+                Vs[1][:,iλ] .= ps.Z[1][:,1]
+            else
+                # A₂x₂ = μ x₁, etc.
+                il = p
+                fac = one(T)
+                μ = (ps.values[1] + 0im) ^ (1/RT(p))
+                for l in p:-1:1
+                    lp = mod(l,p) + 1
+                    if l == ps.schurindex
+                        Tl = ps.T1
+                    else
+                        il -= 1
+                        Tl = ps.T[il]
+                    end
+                    Vs[l][:,iλ] .= fac .* ps.Z[lp][:,1]
+                    # FIXME: this just prevents NaN generation
+                    if μ != 0
+                        fac *= (Tl[1,1] / μ)
+                    end
+                end
             end
             nλ = 1
         end

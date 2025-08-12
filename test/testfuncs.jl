@@ -421,15 +421,21 @@ function expsplit(p,T)
 end
 
 # eigenvectors
-function ev_check(As,Vs::AbstractVector{TM},λs; tol=sqrt(eps(real(T)))
+function ev_check(As,Vs::AbstractVector{TM},λs; tol=sqrt(eps(real(T))), left=true
                   ) where {TM <: AbstractMatrix{T}} where {T}
     p = length(As)
     nev = size(Vs[1],2)
     for ki in 1:nev
         μ = λs[ki] ^ (1/p)
         for l in 1:p
-            ref = abs(μ) * norm(Vs[mod(l,p)+1][:,ki])
-            err = norm(As[l] * Vs[l][:,ki] - μ * Vs[mod(l,p)+1][:,ki])
+            lp = mod(l,p) + 1
+            if left
+                ref = abs(μ) * norm(Vs[lp][:,ki])
+                err = norm(As[l] * Vs[l][:,ki] - μ * Vs[lp][:,ki])
+            else
+                ref = abs(μ) * norm(Vs[l][:,ki])
+                err = norm(As[lp] * Vs[lp][:,ki] - μ * Vs[l][:,ki])
+            end
             @test err < tol * ref
         end
     end
